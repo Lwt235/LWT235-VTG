@@ -77,15 +77,15 @@ celerybeat-schedule
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# Environments (virtual environments)
 .env
 .venv
-env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 vtg_env/
+# Note: env/ directory contains install.sh and requirements.txt, not virtual env
 
 # Spyder project settings
 .spyderproject
@@ -108,10 +108,17 @@ vtg_env/
 *~
 
 # Project specific
-outputs/
-ckpts/
-data/videos/
-data/annotations/
+outputs/*
+!outputs/.gitkeep
+!outputs/*/
+outputs/*/*
+!outputs/*/.gitkeep
+ckpts/*
+!ckpts/.gitkeep
+data/videos/*
+!data/videos/.gitkeep
+data/annotations/*
+!data/annotations/.gitkeep
 *.mp4
 *.avi
 *.mkv
