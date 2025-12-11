@@ -200,6 +200,9 @@ class VideoTemporalSFTTrainer(Trainer):
         Returns:
             Loss tensor, and optionally model outputs.
         """
+        # Create a copy to avoid modifying the original inputs
+        inputs = dict(inputs)
+        
         # Extract labels if present
         labels = inputs.pop("labels", None)
         

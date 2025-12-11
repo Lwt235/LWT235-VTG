@@ -335,7 +335,14 @@ class VideoTemporalRLTrainer:
         advantages = self.compute_advantages(rewards, batch_size)
         
         # Forward pass for policy loss
-        # (Simplified - full implementation would track old log probs)
+        # Note: This is a simplified implementation for the initial framework.
+        # A full GRPO implementation would:
+        # 1. Track old log probabilities during generation
+        # 2. Compute new log probabilities for the generated responses
+        # 3. Apply PPO-style clipping with the advantage estimates
+        # 4. Add KL penalty between current and reference policy
+        # The TRL library's GRPOTrainer can be used for full functionality.
+        # TODO: Implement complete policy gradient updates in future iterations
         
         metrics = {
             "reward_mean": rewards.mean().item(),

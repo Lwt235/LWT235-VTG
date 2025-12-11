@@ -174,7 +174,12 @@ class VideoTemporalInference:
                 return_tensors="pt",
             )
         except ImportError:
-            logger.warning("qwen_vl_utils not available, using text-only processing")
+            logger.warning(
+                "qwen_vl_utils not available. Video processing is disabled. "
+                "Install qwen_vl_utils for full video processing functionality: "
+                "pip install qwen-vl-utils"
+            )
+            # Fallback to text-only processing - video content will not be used
             text = f"Video: {video_path}\nQuery: {prompt}"
             inputs = self.tokenizer(
                 text,

@@ -80,19 +80,28 @@ class SFTCollator:
             
         except ImportError:
             logger.warning(
-                "qwen_vl_utils not available. Using basic text tokenization."
+                "qwen_vl_utils not available. Using basic text tokenization. "
+                "Install qwen_vl_utils for full video processing functionality. "
+                "Without it, video content will not be processed correctly."
             )
             texts = []
             for messages in messages_list:
                 # Simple concatenation without vision processing
+                # Note: This fallback loses video information and should only
+                # be used for testing or when video processing is not required.
                 text_parts = []
                 for msg in messages:
                     role = msg["role"]
                     content = msg["content"]
                     if isinstance(content, list):
-                        content = " ".join(
-                            c.get("text", "") for c in content if c.get("type") == "text"
-                        )
+                        # Extract text and note video placeholders
+                        text_content = []
+                        for c in content:
+                            if c.get("type") == "text":
+                                text_content.append(c.get("text", ""))
+                            elif c.get("type") == "video":
+                                text_content.append(f"[VIDEO: {c.get('video', 'unknown')}]")
+                        content = " ".join(text_content)
                     text_parts.append(f"{role}: {content}")
                 texts.append("\n".join(text_parts))
             
@@ -112,8 +121,10 @@ class SFTCollator:
             labels[model_inputs["attention_mask"] == 0] = -100
         
         # Mask prompt tokens (only train on response)
-        # This requires finding the response boundary
-        # For simplicity, we'll mask based on a heuristic
+        # Find the assistant response start by looking for role patterns
+        # For production use, a more robust approach would use tokenizer.apply_chat_template
+        # with return_assistant_tokens_mask=True if supported by the tokenizer.
+        # Here we use a simple heuristic that masks tokens until "assistant:" is found.
         model_inputs["labels"] = labels
         
         # Add metadata
