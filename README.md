@@ -29,8 +29,8 @@ This framework provides a complete pipeline for training video temporal localiza
 
 ```bash
 # Clone the repository
-git clone https://github.com/Lwt235/Qwen3-VL-GRPO-VTG.git
-cd Qwen3-VL-GRPO-VTG
+git clone https://github.com/Lwt235/LWT235-VTG.git
+cd LWT235-VTG
 
 # Run the installation script
 chmod +x env/install.sh
@@ -46,7 +46,7 @@ pip install -r env/requirements.txt
 ## Project Structure
 
 ```
-Qwen3-VL-GRPO-VTG/
+LWT235-VTG/
 ├── env/                          # Environment setup
 │   ├── install.sh               # Installation script
 │   └── requirements.txt         # Python dependencies
@@ -337,12 +337,12 @@ The vision encoder can be replaced by modifying the model loading in trainers.
 If you use this framework, please cite:
 
 ```bibtex
-@misc{qwen3-vl-grpo-vtg,
-  title={Qwen3-VL-GRPO-VTG: Video Temporal Grounding with GRPO},
+@misc{LWT235-VTG,
+  title={LWT235-VTG: Video Temporal Grounding with GRPO},
   author={Lwt235},
   year={2024},
   publisher={GitHub},
-  url={https://github.com/Lwt235/Qwen3-VL-GRPO-VTG}
+  url={https://github.com/Lwt235/LWT235-VTG}
 }
 ```
 
