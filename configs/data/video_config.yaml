@@ -1,0 +1,84 @@
+# Video Data Configuration for Temporal Localization
+# ===================================================
+
+# Dataset settings
+dataset:
+  name: "video_temporal_grounding"
+  data_root: "./data"
+  annotation_file: "./data/annotations/train.jsonl"
+  video_dir: "./data/videos"
+  
+  # Data format specification
+  # Each JSONL line should contain:
+  #   video: str - video file path
+  #   duration: float - video duration in seconds
+  #   timestamp: [float, float] - start and end time
+  #   sentence: str - text query describing the moment
+  #   video_start: float or null - optional trim start
+  #   video_end: float or null - optional trim end
+  #   kwargs: dict - additional metadata (difficulty, qid, etc.)
+
+# Video processing settings
+video:
+  # Maximum number of frames to sample
+  max_frames: 32
+  # Frame sampling strategy: uniform, random, keyframe
+  sampling_strategy: "uniform"
+  # Image resolution for model input
+  resolution:
+    height: 384
+    width: 384
+  # Frame rate for processing (0 = use original)
+  fps: 0
+  # Video normalization
+  normalize:
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+
+# Text processing settings
+text:
+  # Maximum query length (tokens)
+  max_query_length: 77
+  # Tokenizer name (will be loaded from model)
+  tokenizer: null
+
+# Temporal settings
+temporal:
+  # Number of temporal bins for discretization
+  num_bins: 100
+  # Whether to use relative timestamps (0-1) or absolute
+  use_relative_timestamps: true
+  # Output format: "tokens" for text generation, "class" for classification
+  output_format: "tokens"
+  # Temporal output tokens (for token replacement)
+  special_tokens:
+    start_token: "<time_start>"
+    end_token: "<time_end>"
+    separator_token: "<time_sep>"
+
+# Data loading settings
+dataloader:
+  batch_size: 4
+  num_workers: 4
+  prefetch_factor: 2
+  pin_memory: true
+  shuffle: true
+  drop_last: true
+
+# Data augmentation (optional, for training)
+augmentation:
+  enabled: false
+  # Temporal jittering range (fraction of duration)
+  temporal_jitter: 0.05
+  # Color jittering
+  color_jitter:
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.1
+    hue: 0.05
+
+# Validation settings
+validation:
+  annotation_file: "./data/annotations/val.jsonl"
+  batch_size: 8
+  shuffle: false
