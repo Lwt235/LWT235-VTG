@@ -1,4 +1,4 @@
-# Qwen3-VL-GRPO-VTG
+# LWT235-VTG
 
 A robust and extensible deep learning framework for **Video Temporal Grounding (VTG)** using Qwen3-VL as the base Large Vision-Language Model (LVLM).
 
