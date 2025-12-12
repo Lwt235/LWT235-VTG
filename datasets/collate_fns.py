@@ -73,7 +73,7 @@ class SFTCollator:
                 )
                 image_inputs.append(images)
                 
-                if videos is not None:
+                if videos is not None and len(videos) > 0:
                     video_data, video_meta = zip(*videos)
                     video_inputs.append(list(video_data))
                     video_metadata_list.append(list(video_meta))
@@ -89,7 +89,7 @@ class SFTCollator:
             flat_videos = []
             flat_video_metadata = []
             for vids, metas in zip(video_inputs, video_metadata_list):
-                if vids is not None:
+                if vids is not None and metas is not None:
                     flat_videos.extend(vids)
                     flat_video_metadata.extend(metas)
             
@@ -223,7 +223,7 @@ class RLCollator:
                     return_video_metadata=True,
                 )
                 
-                if videos is not None:
+                if videos is not None and len(videos) > 0:
                     video_data, video_meta = zip(*videos)
                     video_inputs.append(list(video_data))
                     video_metadata_list.append(list(video_meta))
@@ -239,7 +239,7 @@ class RLCollator:
             flat_videos = []
             flat_video_metadata = []
             for vids, metas in zip(video_inputs, video_metadata_list):
-                if vids is not None:
+                if vids is not None and metas is not None:
                     flat_videos.extend(vids)
                     flat_video_metadata.extend(metas)
             
