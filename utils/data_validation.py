@@ -13,6 +13,11 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+# Data format field constants - used by both validation and dataset classes
+REQUIRED_FIELDS = ["video", "duration", "timestamp", "sentence"]
+# Note: Additional fields like qid, difficulty, pred are allowed as direct metadata fields
+OPTIONAL_KNOWN_FIELDS = ["video_start", "video_end", "qid", "difficulty", "pred"]
+
 
 class DataValidationError(Exception):
     """Exception raised for data validation errors."""
@@ -26,9 +31,8 @@ class DataValidator:
     Validates annotation files and checks data consistency.
     """
     
-    REQUIRED_FIELDS = ["video", "duration", "timestamp", "sentence"]
-    # Note: Additional fields like qid, difficulty, pred are allowed as direct metadata fields
-    OPTIONAL_FIELDS = ["video_start", "video_end", "qid", "difficulty", "pred"]
+    REQUIRED_FIELDS = REQUIRED_FIELDS
+    OPTIONAL_FIELDS = OPTIONAL_KNOWN_FIELDS
     
     def __init__(
         self,
