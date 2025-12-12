@@ -41,7 +41,8 @@ class TestVideoDataset:
                     "duration": 45.0,
                     "timestamp": [20.0, 35.0],
                     "sentence": "The cat jumps on the table",
-                    "kwargs": {"difficulty": "hard"},
+                    "difficulty": 0.8,
+                    "qid": "test_query_001",
                 },
             ]
             

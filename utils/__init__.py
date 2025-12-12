@@ -2,7 +2,7 @@
 Utility modules for Video Temporal Localization Framework.
 """
 
-from .data_validation import DataValidator, validate_annotation_file
+from .data_validation import DataValidator, validate_annotation_file, REQUIRED_FIELDS, OPTIONAL_KNOWN_FIELDS
 from .logging_utils import setup_logger, get_logger
 from .common import (
     seed_everything,
@@ -33,6 +33,8 @@ from .temporal_tokens import (
 __all__ = [
     "DataValidator",
     "validate_annotation_file",
+    "REQUIRED_FIELDS",
+    "OPTIONAL_KNOWN_FIELDS",
     "setup_logger",
     "get_logger",
     "seed_everything",

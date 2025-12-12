@@ -14,6 +14,7 @@ import torch
 from torch.utils.data import Dataset
 
 from utils.logging_utils import get_logger
+from utils.data_validation import REQUIRED_FIELDS, OPTIONAL_KNOWN_FIELDS
 from utils.temporal_tokens import (
     format_temporal_response,
     timestamp_to_temporal_tokens,
@@ -159,9 +160,20 @@ class VideoTemporalDataset(Dataset):
                 start_time, end_time, duration, NUM_TEMPORAL_TOKENS
             )
 
-        # Include additional kwargs
-        if "kwargs" in sample:
-            result["metadata"] = sample["kwargs"]
+        # Include additional metadata fields (any fields beyond the required ones)
+        # Note: kwargs field was a misunderstanding - additional fields are stored directly
+        # Uses constants from utils.data_validation for consistency
+        required_fields = set(REQUIRED_FIELDS) | {"_line_num"}
+        optional_known_fields = {"video_start", "video_end"}
+        all_known_fields = required_fields | optional_known_fields
+        
+        metadata = {}
+        for key, value in sample.items():
+            if key not in all_known_fields:
+                metadata[key] = value
+        
+        if metadata:
+            result["metadata"] = metadata
 
         if self.transform:
             result = self.transform(result)
