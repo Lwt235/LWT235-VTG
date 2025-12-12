@@ -83,40 +83,49 @@ class VideoTemporalDataset(Dataset):
         if not self.annotation_file.exists():
             raise FileNotFoundError(f"Annotation file not found: {self.annotation_file}")
 
+        # First, try to detect the file format by reading the first non-empty character
         with open(self.annotation_file, "r", encoding="utf-8") as f:
-            content = f.read().strip()
+            first_char = None
+            for char in iter(lambda: f.read(1), ''):
+                if char and not char.isspace():
+                    first_char = char
+                    break
 
-        if not content:
+        if first_char is None:
             return samples
 
-        # Try to parse as JSON array first
-        try:
-            data = json.loads(content)
-            if isinstance(data, list):
-                # JSON array format
-                for idx, sample in enumerate(data, start=1):
-                    if isinstance(sample, dict):
-                        sample["_line_num"] = idx
-                        samples.append(sample)
-                    else:
-                        logger.warning(f"Item {idx}: Expected dict, got {type(sample).__name__}")
-                return samples
-        except json.JSONDecodeError:
-            # Not valid JSON array, try JSONL format
-            pass
-
-        # Fall back to JSONL format (one JSON per line)
-        for line_num, line in enumerate(content.split('\n'), start=1):
-            line = line.strip()
-            if not line:
-                continue
-
+        # If starts with '[', try JSON array format
+        if first_char == '[':
             try:
-                sample = json.loads(line)
-                sample["_line_num"] = line_num
-                samples.append(sample)
-            except json.JSONDecodeError as e:
-                logger.warning(f"Line {line_num}: Invalid JSON: {e}")
+                with open(self.annotation_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    # JSON array format
+                    for idx, sample in enumerate(data, start=1):
+                        if isinstance(sample, dict):
+                            sample_copy = sample.copy()
+                            sample_copy["_line_num"] = idx
+                            samples.append(sample_copy)
+                        else:
+                            logger.warning(f"Item {idx}: Expected dict, got {type(sample).__name__}")
+                    return samples
+            except json.JSONDecodeError:
+                # Failed to parse as JSON array, fall back to JSONL
+                pass
+
+        # Fall back to JSONL format (one JSON per line) - memory efficient line-by-line reading
+        with open(self.annotation_file, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    sample = json.loads(line)
+                    sample["_line_num"] = line_num
+                    samples.append(sample)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Line {line_num}: Invalid JSON: {e}")
 
         return samples
 
