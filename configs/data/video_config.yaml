@@ -10,13 +10,18 @@ dataset:
   
   # Data format specification
   # Each JSONL line should contain:
-  #   video: str - video file path
+  #   video: str - video file path (e.g., "./data/videos/example.mp4")
   #   duration: float - video duration in seconds
-  #   timestamp: [float, float] - start and end time
+  #   timestamp: [float, float] - start and end time of target segment
   #   sentence: str - text query describing the moment
-  #   video_start: float or null - optional trim start
-  #   video_end: float or null - optional trim end
-  #   kwargs: dict - additional metadata (difficulty, qid, etc.)
+  #   video_start: float (optional) - trim video from this time
+  #   video_end: float (optional) - trim video to this time
+  #   qid: str (optional) - unique query identifier
+  #   difficulty: float (optional) - sample difficulty score
+  #   pred: [float, float] (optional) - model predictions for evaluation
+  #
+  # Note: Additional metadata fields can be added directly to each JSON object.
+  # These fields will be collected automatically as metadata.
 
 # Video processing settings
 video:

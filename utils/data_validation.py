@@ -27,7 +27,8 @@ class DataValidator:
     """
     
     REQUIRED_FIELDS = ["video", "duration", "timestamp", "sentence"]
-    OPTIONAL_FIELDS = ["video_start", "video_end", "kwargs"]
+    # Note: Additional fields like qid, difficulty, pred are allowed as direct metadata fields
+    OPTIONAL_FIELDS = ["video_start", "video_end", "qid", "difficulty", "pred"]
     
     def __init__(
         self,

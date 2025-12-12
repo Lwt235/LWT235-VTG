@@ -159,9 +159,19 @@ class VideoTemporalDataset(Dataset):
                 start_time, end_time, duration, NUM_TEMPORAL_TOKENS
             )
 
-        # Include additional kwargs
-        if "kwargs" in sample:
-            result["metadata"] = sample["kwargs"]
+        # Include additional metadata fields (any fields beyond the required ones)
+        # Note: kwargs field was a misunderstanding - additional fields are stored directly
+        required_fields = {"video", "duration", "timestamp", "sentence", "_line_num"}
+        optional_known_fields = {"video_start", "video_end"}
+        all_known_fields = required_fields | optional_known_fields
+        
+        metadata = {}
+        for key, value in sample.items():
+            if key not in all_known_fields:
+                metadata[key] = value
+        
+        if metadata:
+            result["metadata"] = metadata
 
         if self.transform:
             result = self.transform(result)

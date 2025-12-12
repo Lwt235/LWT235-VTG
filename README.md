@@ -101,25 +101,31 @@ Each line in the annotation file should be a JSON object with the following fiel
 
 ```json
 {
-  "video": "./data/videos/example.mp4",
-  "duration": 24.9,
+  "video": "./data/videos/timerft_data/_0yiT0hhCCM_00:06:44:200_00:07:09:100.mp4",
+  "duration": 24.900000000000034,
   "timestamp": [11.3, 15.0],
   "sentence": "the paper bill has an image of a woman holding up a paper",
-  "video_start": null,
-  "video_end": null,
-  "kwargs": {"difficulty": "easy", "qid": "sample_001"}
+  "qid": "my|internvid-vtime|_0yiT0hhCCM|the paper bill has an image of a woman holding up a paper",
+  "video_start": 404.2,
+  "video_end": 429.1,
+  "difficulty": 24.650233177881407,
+  "pred": [0.0, 15.01]
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `video` | string | Path to video file |
-| `duration` | float | Video duration in seconds |
-| `timestamp` | [float, float] | Start and end time of the target segment |
-| `sentence` | string | Text query describing the video segment |
-| `video_start` | float or null | Optional: trim video from this time |
-| `video_end` | float or null | Optional: trim video to this time |
-| `kwargs` | dict | Additional metadata (difficulty, qid, etc.) |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `video` | string | ✓ | Path to video file |
+| `duration` | float | ✓ | Video duration in seconds |
+| `timestamp` | [float, float] | ✓ | Start and end time of the target segment |
+| `sentence` | string | ✓ | Text query describing the video segment |
+| `video_start` | float | | Optional: absolute start time for video trimming |
+| `video_end` | float | | Optional: absolute end time for video trimming |
+| `qid` | string | | Optional: unique query identifier |
+| `difficulty` | float | | Optional: sample difficulty score |
+| `pred` | [float, float] | | Optional: model predictions for evaluation |
+
+> **Note**: Additional metadata fields can be added directly to each JSON object and will be automatically collected as metadata. Do not nest metadata in a `kwargs` field.
 
 ## Training
 
