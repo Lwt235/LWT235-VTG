@@ -533,11 +533,19 @@ def create_rl_trainer(
         # Get target modules from config
         target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
         
-        # When using temporal tokens, apply LoRA adapters only to embed_tokens and lm_head
-        # Keep all other model parameters frozen
+        # When using temporal tokens, ensure embed_tokens and lm_head are included
+        # in target_modules for proper adaptation to new token embeddings
         if use_temporal_tokens:
-            target_modules = ["embed_tokens", "lm_head"]
-            logger.info(f"Temporal tokens enabled: applying LoRA only to {target_modules}")
+            if isinstance(target_modules, list):
+                target_modules = list(target_modules)  # Make a copy
+            else:
+                target_modules = list(target_modules)
+            
+            if "embed_tokens" not in target_modules:
+                target_modules.append("embed_tokens")
+            if "lm_head" not in target_modules:
+                target_modules.append("lm_head")
+            logger.info(f"Temporal tokens enabled: target_modules = {target_modules}")
         
         peft_config = LoraConfig(
             r=lora_config.get("r", 64),
@@ -546,7 +554,6 @@ def create_rl_trainer(
             target_modules=target_modules,
             bias=lora_config.get("bias", "none"),
             task_type=TaskType.CAUSAL_LM,
-            # No modules_to_save - all main model parameters stay frozen
         )
         
         model = get_peft_model(model, peft_config)
