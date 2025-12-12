@@ -24,6 +24,8 @@ lora:
   r: 64
   lora_alpha: 128
   lora_dropout: 0.05
+  # Target modules for LoRA adapters
+  # When use_temporal_tokens=true, only embed_tokens and lm_head are used
   target_modules:
     - "q_proj"
     - "k_proj"
@@ -34,10 +36,8 @@ lora:
     - "down_proj"
   bias: "none"
   task_type: "CAUSAL_LM"
-  # Modules to fully train (not LoRA) - required for temporal tokens
-  modules_to_save:
-    - "embed_tokens"
-    - "lm_head"
+  # Note: When temporal tokens are enabled, LoRA is applied ONLY to
+  # embed_tokens and lm_head, keeping all other model parameters frozen
 
 # GRPO-specific configuration
 grpo:

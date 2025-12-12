@@ -49,10 +49,13 @@ temporal:
   # Whether to use relative timestamps (0-1) or absolute
   use_relative_timestamps: true
   # Whether to use temporal tokens (<0>~<999>) instead of float values
-  # When enabled, replaces tokens at IDs 150643-151642 with <0>-<999>
+  # When enabled, adds new tokens to vocabulary (not replacing existing tokens)
   use_temporal_tokens: false
-  # Embedding initialization strategy for temporal tokens: "mean", "random", "copy_existing"
-  embedding_init_strategy: "mean"
+  # Embedding initialization strategy for temporal tokens:
+  # - "sinusoidal": Use sinusoidal positional encoding (recommended for faster convergence)
+  # - "mean": Use mean of existing embeddings
+  # - "random": Random initialization
+  embedding_init_strategy: "sinusoidal"
   # Output format: "tokens" for text generation, "class" for classification
   output_format: "tokens"
   # Temporal output tokens (for token replacement)

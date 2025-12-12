@@ -26,9 +26,8 @@ from .temporal_tokens import (
     add_temporal_tokens_to_tokenizer,
     initialize_temporal_embeddings,
     resize_model_embeddings_for_temporal_tokens,
+    create_sinusoidal_embeddings,
     NUM_TEMPORAL_TOKENS,
-    TEMPORAL_TOKEN_START_ID,
-    TEMPORAL_TOKEN_END_ID,
 )
 
 __all__ = [
@@ -56,7 +55,6 @@ __all__ = [
     "add_temporal_tokens_to_tokenizer",
     "initialize_temporal_embeddings",
     "resize_model_embeddings_for_temporal_tokens",
+    "create_sinusoidal_embeddings",
     "NUM_TEMPORAL_TOKENS",
-    "TEMPORAL_TOKEN_START_ID",
-    "TEMPORAL_TOKEN_END_ID",
 ]

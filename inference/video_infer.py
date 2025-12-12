@@ -126,9 +126,9 @@ class VideoTemporalInference:
 
         # Initialize temporal token embeddings if enabled
         if self.use_temporal_tokens:
-            logger.info("Initializing temporal token embeddings")
+            logger.info("Initializing temporal token embeddings with sinusoidal encoding")
             resize_model_embeddings_for_temporal_tokens(
-                self.model, self.tokenizer, "mean"
+                self.model, self.tokenizer, "sinusoidal"
             )
 
         self.model.eval()
