@@ -9,6 +9,7 @@ The temporal tokens enable fine-grained temporal grounding by discretizing
 normalized timestamps [0, 1] into 1000 bins.
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -180,8 +181,6 @@ def parse_temporal_token(token: str) -> Optional[int]:
     Returns:
         Bin index if valid temporal token, None otherwise.
     """
-    import re
-
     match = re.match(r"<(\d+)>", token.strip())
     if match:
         bin_idx = int(match.group(1))
@@ -200,8 +199,6 @@ def extract_temporal_tokens_from_text(text: str) -> List[int]:
     Returns:
         List of bin indices found in the text.
     """
-    import re
-
     pattern = r"<(\d+)>"
     matches = re.findall(pattern, text)
 
