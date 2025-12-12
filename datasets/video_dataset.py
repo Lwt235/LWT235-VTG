@@ -21,10 +21,10 @@ logger = get_logger(__name__)
 class VideoTemporalDataset(Dataset):
     """
     Base dataset for video temporal grounding.
-    
+
     Loads video-text pairs with temporal annotations from JSONL files.
     """
-    
+
     def __init__(
         self,
         annotation_file: Union[str, Path],
@@ -38,7 +38,7 @@ class VideoTemporalDataset(Dataset):
     ):
         """
         Initialize the dataset.
-        
+
         Args:
             annotation_file: Path to JSONL annotation file.
             video_dir: Base directory for video files.
@@ -57,55 +57,55 @@ class VideoTemporalDataset(Dataset):
         self.use_relative_timestamps = use_relative_timestamps
         self.num_bins = num_bins
         self.transform = transform
-        
+
         # Load annotations
         self.samples = self._load_annotations()
         logger.info(f"Loaded {len(self.samples)} samples from {annotation_file}")
-    
+
     def _load_annotations(self) -> List[Dict[str, Any]]:
         """Load and parse annotation file."""
         samples = []
-        
+
         if not self.annotation_file.exists():
             raise FileNotFoundError(f"Annotation file not found: {self.annotation_file}")
-        
+
         with open(self.annotation_file, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                
+
                 try:
                     sample = json.loads(line)
                     sample["_line_num"] = line_num
                     samples.append(sample)
                 except json.JSONDecodeError as e:
                     logger.warning(f"Line {line_num}: Invalid JSON: {e}")
-        
+
         return samples
-    
+
     def __len__(self) -> int:
         return len(self.samples)
-    
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         sample = self.samples[idx]
-        
+
         # Get video path
         video_path = sample["video"]
         if self.video_dir:
             video_path = self.video_dir / video_path
         else:
             video_path = Path(video_path)
-        
+
         # Get temporal info
         duration = sample["duration"]
         timestamp = sample["timestamp"]
         start_time, end_time = timestamp[0], timestamp[1]
-        
+
         # Apply video trimming if specified
         video_start = sample.get("video_start")
         video_end = sample.get("video_end")
-        
+
         if video_start is not None:
             start_time = max(0, start_time - video_start)
             end_time = max(0, end_time - video_start)
@@ -114,7 +114,7 @@ class VideoTemporalDataset(Dataset):
                 duration = min(duration, video_end - video_start)
         elif video_end is not None:
             duration = min(duration, video_end)
-        
+
         # Normalize timestamps if needed
         if self.use_relative_timestamps and duration > 0:
             norm_start = start_time / duration
@@ -122,13 +122,13 @@ class VideoTemporalDataset(Dataset):
         else:
             norm_start = start_time
             norm_end = end_time
-        
+
         # Discretize to bins
         start_bin = int(norm_start * self.num_bins)
         end_bin = int(norm_end * self.num_bins)
         start_bin = max(0, min(self.num_bins - 1, start_bin))
         end_bin = max(0, min(self.num_bins - 1, end_bin))
-        
+
         result = {
             "video_path": str(video_path),
             "video_start": video_start,
@@ -140,16 +140,16 @@ class VideoTemporalDataset(Dataset):
             "temporal_bins": [start_bin, end_bin],
             "sample_idx": idx,
         }
-        
+
         # Include additional kwargs
         if "kwargs" in sample:
             result["metadata"] = sample["kwargs"]
-        
+
         if self.transform:
             result = self.transform(result)
-        
+
         return result
-    
+
     def get_video_messages(
         self,
         video_path: str,
@@ -159,13 +159,13 @@ class VideoTemporalDataset(Dataset):
     ) -> List[Dict[str, Any]]:
         """
         Create message format for Qwen VL model.
-        
+
         Args:
             video_path: Path to video file.
             query: Text query.
             video_start: Optional start time for trimming.
             video_end: Optional end time for trimming.
-        
+
         Returns:
             List of messages in Qwen VL format.
         """
@@ -173,12 +173,12 @@ class VideoTemporalDataset(Dataset):
             "type": "video",
             "video": video_path,
         }
-        
+
         if video_start is not None:
             video_content["video_start"] = video_start
         if video_end is not None:
             video_content["video_end"] = video_end
-        
+
         messages = [
             {
                 "role": "user",
@@ -188,24 +188,24 @@ class VideoTemporalDataset(Dataset):
                 ],
             }
         ]
-        
+
         return messages
 
 
 class VideoTemporalSFTDataset(VideoTemporalDataset):
     """
     Dataset for Supervised Fine-Tuning on video temporal grounding.
-    
+
     Extends VideoTemporalDataset with prompt formatting and label generation.
     """
-    
+
     # Default prompt template
     DEFAULT_PROMPT = (
         "Given the video, please identify the start and end time of the moment "
         "described by the following query: \"{query}\"\n"
-        "Provide the answer in the format: <start_time> to <end_time>"
+        "Provide the answer in the format: <start_time><end_time>"
     )
-    
+
     def __init__(
         self,
         annotation_file: Union[str, Path],
@@ -221,7 +221,7 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
     ):
         """
         Initialize the SFT dataset.
-        
+
         Args:
             annotation_file: Path to JSONL annotation file.
             video_dir: Base directory for video files.
@@ -244,33 +244,33 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             num_bins=num_bins,
             transform=transform,
         )
-        
+
         self.prompt_template = prompt_template or self.DEFAULT_PROMPT
-        self.response_template = response_template or "{start:.2f} to {end:.2f}"
-    
+        self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
         sample = super().__getitem__(idx)
-        
+
         # Format prompt
         prompt = self.prompt_template.format(query=sample["query"])
-        
+
         # Format response (ground truth)
         if self.use_relative_timestamps:
             start, end = sample["normalized_timestamp"]
         else:
             start, end = sample["timestamp"]
-        
+
         response = self.response_template.format(start=start, end=end)
-        
+
         sample["prompt"] = prompt
         sample["response"] = response
-        
+
         # Create messages for Qwen VL
         sample["messages"] = self._create_messages(sample, prompt, response)
-        
+
         return sample
-    
+
     def _create_messages(
         self,
         sample: Dict[str, Any],
@@ -282,12 +282,12 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             "type": "video",
             "video": sample["video_path"],
         }
-        
+
         if sample.get("video_start") is not None:
             video_content["video_start"] = sample["video_start"]
         if sample.get("video_end") is not None:
             video_content["video_end"] = sample["video_end"]
-        
+
         messages = [
             {
                 "role": "user",
@@ -301,22 +301,22 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
                 "content": response,
             },
         ]
-        
+
         return messages
 
 
 class VideoTemporalRLDataset(VideoTemporalDataset):
     """
     Dataset for Reinforcement Learning on video temporal grounding.
-    
+
     Provides samples for GRPO/R1 training with reward computation support.
     """
-    
+
     DEFAULT_PROMPT = (
         "Watch the video and identify when the following event occurs: \"{query}\"\n"
         "Respond with the start and end times of the relevant segment."
     )
-    
+
     def __init__(
         self,
         annotation_file: Union[str, Path],
@@ -331,7 +331,7 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
     ):
         """
         Initialize the RL dataset.
-        
+
         Args:
             annotation_file: Path to JSONL annotation file.
             video_dir: Base directory for video files.
@@ -353,29 +353,29 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             num_bins=num_bins,
             transform=transform,
         )
-        
+
         self.prompt_template = prompt_template or self.DEFAULT_PROMPT
-    
+
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
         sample = super().__getitem__(idx)
-        
+
         # Format prompt
         prompt = self.prompt_template.format(query=sample["query"])
         sample["prompt"] = prompt
-        
+
         # Store ground truth for reward computation
         sample["ground_truth"] = {
             "timestamp": sample["timestamp"],
             "normalized_timestamp": sample["normalized_timestamp"],
             "duration": sample["duration"],
         }
-        
+
         # Create messages for generation
         sample["messages"] = self._create_prompt_messages(sample, prompt)
-        
+
         return sample
-    
+
     def _create_prompt_messages(
         self,
         sample: Dict[str, Any],
@@ -386,12 +386,12 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             "type": "video",
             "video": sample["video_path"],
         }
-        
+
         if sample.get("video_start") is not None:
             video_content["video_start"] = sample["video_start"]
         if sample.get("video_end") is not None:
             video_content["video_end"] = sample["video_end"]
-        
+
         messages = [
             {
                 "role": "user",
@@ -401,5 +401,5 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
                 ],
             },
         ]
-        
+
         return messages
