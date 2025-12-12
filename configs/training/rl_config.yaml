@@ -85,6 +85,7 @@ training:
   learning_rate: 5.0e-6
   lr_scheduler_type: "cosine"
   warmup_ratio: 0.1
+  warmup_steps: 0
   
   optim: "adamw_torch"
   weight_decay: 0.01
@@ -93,6 +94,8 @@ training:
   bf16: true
   fp16: false
   gradient_checkpointing: true
+  gradient_checkpointing_kwargs:
+    use_reentrant: false
   
   logging_dir: "./outputs/rl/logs"
   logging_steps: 10

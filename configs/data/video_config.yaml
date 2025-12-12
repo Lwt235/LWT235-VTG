@@ -9,7 +9,11 @@ dataset:
   video_dir: "./data/videos"
 
   # Data format specification
-  # Each JSONL line should contain:
+  # Supports two annotation formats:
+  # 1. JSON array format: A single JSON array containing annotation objects
+  # 2. JSONL format: One JSON object per line (legacy format)
+  #
+  # Each annotation object should contain:
   #   video: str - video file path (e.g., "./data/videos/example.mp4")
   #   duration: float - video duration in seconds
   #   timestamp: [float, float] - start and end time of target segment

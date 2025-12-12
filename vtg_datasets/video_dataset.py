@@ -72,12 +72,48 @@ class VideoTemporalDataset(Dataset):
         logger.info(f"Loaded {len(self.samples)} samples from {annotation_file}")
 
     def _load_annotations(self) -> List[Dict[str, Any]]:
-        """Load and parse annotation file."""
+        """Load and parse annotation file.
+        
+        Supports two formats:
+        1. JSON array format: A single JSON array containing annotation objects
+        2. JSONL format: One JSON object per line (legacy format)
+        """
         samples = []
 
         if not self.annotation_file.exists():
             raise FileNotFoundError(f"Annotation file not found: {self.annotation_file}")
 
+        # First, try to detect the file format by reading the first non-empty character
+        with open(self.annotation_file, "r", encoding="utf-8") as f:
+            first_char = None
+            for char in iter(lambda: f.read(1), ''):
+                if char and not char.isspace():
+                    first_char = char
+                    break
+
+        if first_char is None:
+            return samples
+
+        # If starts with '[', try JSON array format
+        if first_char == '[':
+            try:
+                with open(self.annotation_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    # JSON array format
+                    for idx, sample in enumerate(data, start=1):
+                        if isinstance(sample, dict):
+                            sample_copy = sample.copy()
+                            sample_copy["_line_num"] = idx
+                            samples.append(sample_copy)
+                        else:
+                            logger.warning(f"Item {idx}: Expected dict, got {type(sample).__name__}")
+                    return samples
+            except json.JSONDecodeError:
+                # Failed to parse as JSON array, fall back to JSONL
+                pass
+
+        # Fall back to JSONL format (one JSON per line) - memory efficient line-by-line reading
         with open(self.annotation_file, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, start=1):
                 line = line.strip()
