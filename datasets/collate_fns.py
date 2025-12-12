@@ -61,21 +61,50 @@ class SFTCollator:
             
             image_inputs = []
             video_inputs = []
+            video_metadata_list = []
+            all_video_kwargs = {}
             
             for messages in messages_list:
-                images, videos = process_vision_info(messages)
+                images, videos, video_kwargs = process_vision_info(
+                    messages,
+                    image_patch_size=16,
+                    return_video_kwargs=True,
+                    return_video_metadata=True,
+                )
                 image_inputs.append(images)
-                video_inputs.append(videos)
+                
+                if videos is not None:
+                    video_data, video_meta = zip(*videos)
+                    video_inputs.append(list(video_data))
+                    video_metadata_list.append(list(video_meta))
+                else:
+                    video_inputs.append(None)
+                    video_metadata_list.append(None)
+                
+                # Merge video_kwargs (they should be the same for all samples)
+                if video_kwargs:
+                    all_video_kwargs.update(video_kwargs)
+            
+            # Flatten video inputs and metadata for batched processing
+            flat_videos = []
+            flat_video_metadata = []
+            for vids, metas in zip(video_inputs, video_metadata_list):
+                if vids is not None:
+                    flat_videos.extend(vids)
+                    flat_video_metadata.extend(metas)
             
             # Tokenize
             model_inputs = self.processor(
                 text=texts,
                 images=image_inputs if any(image_inputs) else None,
-                videos=video_inputs if any(video_inputs) else None,
+                videos=flat_videos if flat_videos else None,
+                video_metadata=flat_video_metadata if flat_video_metadata else None,
                 padding=self.padding,
                 truncation=self.truncation,
                 max_length=self.max_length,
                 return_tensors=self.return_tensors,
+                do_resize=False,
+                **all_video_kwargs,
             )
             
         except ImportError:
@@ -183,17 +212,47 @@ class RLCollator:
             from qwen_vl_utils import process_vision_info
             
             video_inputs = []
+            video_metadata_list = []
+            all_video_kwargs = {}
+            
             for messages in messages_list:
-                _, videos = process_vision_info(messages)
-                video_inputs.append(videos)
+                _, videos, video_kwargs = process_vision_info(
+                    messages,
+                    image_patch_size=16,
+                    return_video_kwargs=True,
+                    return_video_metadata=True,
+                )
+                
+                if videos is not None:
+                    video_data, video_meta = zip(*videos)
+                    video_inputs.append(list(video_data))
+                    video_metadata_list.append(list(video_meta))
+                else:
+                    video_inputs.append(None)
+                    video_metadata_list.append(None)
+                
+                # Merge video_kwargs (they should be the same for all samples)
+                if video_kwargs:
+                    all_video_kwargs.update(video_kwargs)
+            
+            # Flatten video inputs and metadata for batched processing
+            flat_videos = []
+            flat_video_metadata = []
+            for vids, metas in zip(video_inputs, video_metadata_list):
+                if vids is not None:
+                    flat_videos.extend(vids)
+                    flat_video_metadata.extend(metas)
             
             prompt_inputs = self.processor(
                 text=texts,
-                videos=video_inputs if any(video_inputs) else None,
+                videos=flat_videos if flat_videos else None,
+                video_metadata=flat_video_metadata if flat_video_metadata else None,
                 padding=self.padding,
                 truncation=self.truncation,
                 max_length=self.max_prompt_length,
                 return_tensors=self.return_tensors,
+                do_resize=False,
+                **all_video_kwargs,
             )
             
         except ImportError:
