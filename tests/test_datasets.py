@@ -200,5 +200,80 @@ class TestCollateFunctions:
         assert mask[1, 2] == False
 
 
+class TestTemporalTokensInDataset:
+    """Tests for temporal tokens support in datasets."""
+
+    @pytest.fixture
+    def sample_annotations(self):
+        """Create sample annotation file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.jsonl"
+
+            samples = [
+                {
+                    "video": "./videos/test1.mp4",
+                    "duration": 20.0,
+                    "timestamp": [5.0, 10.0],
+                    "sentence": "A person opens the door",
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                for sample in samples:
+                    f.write(json.dumps(sample) + "\n")
+
+            yield annotation_path
+
+    def test_base_dataset_with_temporal_tokens(self, sample_annotations):
+        """Test base dataset with temporal tokens enabled."""
+        dataset = VideoTemporalDataset(
+            annotation_file=sample_annotations,
+            use_temporal_tokens=True,
+        )
+
+        item = dataset[0]
+
+        # Check temporal tokens are present
+        assert "temporal_tokens" in item
+        assert len(item["temporal_tokens"]) == 2
+        # 5/20 = 0.25 -> bin 250, 10/20 = 0.5 -> bin 500
+        assert item["temporal_tokens"][0] == "<250>"
+        assert item["temporal_tokens"][1] == "<500>"
+
+        # Check temporal response is present
+        assert "temporal_response" in item
+        assert item["temporal_response"] == "<250><500>"
+
+    def test_sft_dataset_with_temporal_tokens(self, sample_annotations):
+        """Test SFT dataset with temporal tokens enabled."""
+        dataset = VideoTemporalSFTDataset(
+            annotation_file=sample_annotations,
+            use_temporal_tokens=True,
+        )
+
+        item = dataset[0]
+
+        # Response should use temporal tokens format
+        assert "response" in item
+        assert item["response"] == "<250><500>"
+
+        # Prompt should mention temporal tokens
+        assert "temporal tokens" in item["prompt"].lower()
+
+    def test_rl_dataset_with_temporal_tokens(self, sample_annotations):
+        """Test RL dataset with temporal tokens enabled."""
+        dataset = VideoTemporalRLDataset(
+            annotation_file=sample_annotations,
+            use_temporal_tokens=True,
+        )
+
+        item = dataset[0]
+
+        # Ground truth should include temporal tokens
+        assert "ground_truth" in item
+        assert "temporal_tokens" in item["ground_truth"]
+        assert item["ground_truth"]["temporal_tokens"] == ["<250>", "<500>"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

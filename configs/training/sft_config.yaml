@@ -28,7 +28,8 @@ lora:
   r: 64
   lora_alpha: 128
   lora_dropout: 0.05
-  # Target modules including lm_head for vocab changes
+  # Target modules for LoRA adapters
+  # When use_temporal_tokens=true, embed_tokens and lm_head are automatically added
   target_modules:
     - "q_proj"
     - "k_proj"
@@ -37,13 +38,10 @@ lora:
     - "gate_proj"
     - "up_proj"
     - "down_proj"
-    - "lm_head"
   bias: "none"
   task_type: "CAUSAL_LM"
-  # Modules to fully train (not LoRA)
-  modules_to_save:
-    - "embed_tokens"
-    - "lm_head"
+  # Note: When temporal tokens are enabled, embed_tokens and lm_head
+  # are automatically added to target_modules for proper adaptation
 
 # Training configuration
 training:

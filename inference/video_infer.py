@@ -21,6 +21,12 @@ from peft import PeftModel
 
 from utils.logging_utils import get_logger
 from utils.common import load_config, seconds_to_timestamp
+from utils.temporal_tokens import (
+    parse_temporal_response,
+    add_temporal_tokens_to_tokenizer,
+    resize_model_embeddings_for_temporal_tokens,
+    NUM_TEMPORAL_TOKENS,
+)
 from qwen_vl_utils import process_vision_info
 
 logger = get_logger(__name__)
@@ -39,6 +45,12 @@ class VideoTemporalInference:
         "Provide the answer in the format: <start_time> to <end_time>"
     )
 
+    TEMPORAL_TOKEN_PROMPT = (
+        "Given the video, please identify the start and end time of the moment "
+        "described by the following query: \"{query}\"\n"
+        "Provide the answer using temporal tokens in the format: <start><end>"
+    )
+
     def __init__(
         self,
         model_path: Union[str, Path],
@@ -46,6 +58,7 @@ class VideoTemporalInference:
         torch_dtype: str = "bfloat16",
         prompt_template: Optional[str] = None,
         use_flash_attention: bool = True,
+        use_temporal_tokens: bool = False,
     ):
         """
         Initialize the inference engine.
@@ -56,10 +69,17 @@ class VideoTemporalInference:
             torch_dtype: Torch data type for model.
             prompt_template: Custom prompt template with {query} placeholder.
             use_flash_attention: Whether to use flash attention.
+            use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
         """
         self.model_path = Path(model_path)
         self.torch_dtype = getattr(torch, torch_dtype)
-        self.prompt_template = prompt_template or self.DEFAULT_PROMPT
+        self.use_temporal_tokens = use_temporal_tokens
+
+        # Set prompt template based on mode
+        if use_temporal_tokens:
+            self.prompt_template = prompt_template or self.TEMPORAL_TOKEN_PROMPT
+        else:
+            self.prompt_template = prompt_template or self.DEFAULT_PROMPT
 
         # Set device
         if device is None:
@@ -88,6 +108,11 @@ class VideoTemporalInference:
             trust_remote_code=True,
         )
 
+        # Add temporal tokens if enabled
+        if self.use_temporal_tokens:
+            logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+            add_temporal_tokens_to_tokenizer(self.tokenizer)
+
         # Load model
         attn_impl = "flash_attention_2" if use_flash_attention else "eager"
 
@@ -98,6 +123,13 @@ class VideoTemporalInference:
             attn_implementation=attn_impl,
             device_map=self.device,
         )
+
+        # Initialize temporal token embeddings if enabled
+        if self.use_temporal_tokens:
+            logger.info("Initializing temporal token embeddings with sinusoidal encoding")
+            resize_model_embeddings_for_temporal_tokens(
+                self.model, self.tokenizer, "sinusoidal"
+            )
 
         self.model.eval()
 
@@ -112,6 +144,7 @@ class VideoTemporalInference:
         query: str,
         video_start: Optional[float] = None,
         video_end: Optional[float] = None,
+        duration: Optional[float] = None,
         fps: Optional[float] = 2,
         generation_config: Optional[GenerationConfig] = None,
         return_raw_output: bool = False,
@@ -124,6 +157,7 @@ class VideoTemporalInference:
             query: Text query describing the moment.
             video_start: Optional start time to trim video.
             video_end: Optional end time to trim video.
+            duration: Video duration in seconds (required for temporal tokens mode).
             generation_config: Custom generation configuration.
             return_raw_output: Whether to include raw model output.
 
@@ -211,8 +245,29 @@ class VideoTemporalInference:
 
         # Parse timestamps
         try:
-            start_time, end_time = self._parse_timestamps(response_text)
-            success = True
+            if self.use_temporal_tokens:
+                # Parse temporal tokens
+                if duration is None:
+                    # Try to estimate duration from video_start/video_end
+                    if video_start is not None and video_end is not None:
+                        duration = video_end - video_start
+                    else:
+                        # Default duration - will result in normalized values
+                        duration = 1.0
+                        logger.warning(
+                            "No duration provided for temporal token parsing. "
+                            "Using duration=1.0 (normalized values)."
+                        )
+                result_times = parse_temporal_response(response_text, duration)
+                if result_times is not None:
+                    start_time, end_time = result_times
+                    success = True
+                else:
+                    start_time, end_time = 0.0, 0.0
+                    success = False
+            else:
+                start_time, end_time = self._parse_timestamps(response_text)
+                success = True
         except ValueError:
             start_time, end_time = 0.0, 0.0
             success = False
@@ -238,6 +293,7 @@ class VideoTemporalInference:
         queries: List[str],
         video_starts: Optional[List[Optional[float]]] = None,
         video_ends: Optional[List[Optional[float]]] = None,
+        durations: Optional[List[Optional[float]]] = None,
         batch_size: int = 4,
         show_progress: bool = True,
     ) -> List[Dict[str, Any]]:
@@ -249,6 +305,7 @@ class VideoTemporalInference:
             queries: List of text queries.
             video_starts: Optional list of start times.
             video_ends: Optional list of end times.
+            durations: Optional list of video durations (required for temporal tokens).
             batch_size: Batch size for processing.
             show_progress: Whether to show progress bar.
 
@@ -261,6 +318,8 @@ class VideoTemporalInference:
             video_starts = [None] * n_samples
         if video_ends is None:
             video_ends = [None] * n_samples
+        if durations is None:
+            durations = [None] * n_samples
 
         results = []
 
@@ -281,6 +340,7 @@ class VideoTemporalInference:
                     query=queries[j],
                     video_start=video_starts[j],
                     video_end=video_ends[j],
+                    duration=durations[j],
                 )
                 results.append(result)
 

@@ -31,6 +31,10 @@ from omegaconf import DictConfig, OmegaConf
 
 from utils.logging_utils import get_logger
 from utils.common import load_config, merge_configs, count_parameters
+from utils.temporal_tokens import (
+    add_temporal_tokens_to_tokenizer,
+    resize_model_embeddings_for_temporal_tokens,
+)
 
 logger = get_logger(__name__)
 
@@ -308,6 +312,17 @@ def create_sft_trainer(
         trust_remote_code=model_config.get("trust_remote_code", True),
     )
     
+    # Check if temporal tokens should be used
+    temporal_config = {}
+    if data_config is not None:
+        temporal_config = data_config.get("temporal", {})
+    use_temporal_tokens = temporal_config.get("use_temporal_tokens", False)
+    
+    # Add temporal tokens to tokenizer if enabled
+    if use_temporal_tokens:
+        logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+        add_temporal_tokens_to_tokenizer(tokenizer)
+    
     # Load model
     torch_dtype = getattr(torch, model_config.get("torch_dtype", "bfloat16"))
     
@@ -318,19 +333,41 @@ def create_sft_trainer(
         attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )
     
+    # Initialize temporal token embeddings if enabled
+    if use_temporal_tokens:
+        logger.info("Initializing temporal token embeddings with sinusoidal encoding")
+        init_strategy = temporal_config.get("embedding_init_strategy", "sinusoidal")
+        resize_model_embeddings_for_temporal_tokens(model, tokenizer, init_strategy)
+    
     # Apply LoRA if configured
     lora_config = config.get("lora", {})
     if lora_config.get("enabled", False):
         logger.info("Applying LoRA configuration")
         
+        # Get target modules from config
+        target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
+        
+        # When using temporal tokens, ensure embed_tokens and lm_head are included
+        # in target_modules for proper adaptation to new token embeddings
+        if use_temporal_tokens:
+            if isinstance(target_modules, list):
+                target_modules = list(target_modules)  # Make a copy
+            else:
+                target_modules = list(target_modules)
+            
+            if "embed_tokens" not in target_modules:
+                target_modules.append("embed_tokens")
+            if "lm_head" not in target_modules:
+                target_modules.append("lm_head")
+            logger.info(f"Temporal tokens enabled: target_modules = {target_modules}")
+        
         peft_config = LoraConfig(
             r=lora_config.get("r", 64),
             lora_alpha=lora_config.get("lora_alpha", 128),
             lora_dropout=lora_config.get("lora_dropout", 0.05),
-            target_modules=lora_config.get("target_modules", ["q_proj", "v_proj"]),
+            target_modules=target_modules,
             bias=lora_config.get("bias", "none"),
             task_type=TaskType.CAUSAL_LM,
-            modules_to_save=lora_config.get("modules_to_save"),
         )
         
         model = get_peft_model(model, peft_config)
@@ -383,7 +420,7 @@ def create_sft_trainer(
         
         dataset_config = data_config.get("dataset", {})
         video_config = data_config.get("video", {})
-        temporal_config = data_config.get("temporal", {})
+        temporal_cfg = data_config.get("temporal", {})
         
         train_dataset = VideoTemporalSFTDataset(
             annotation_file=dataset_config.get("annotation_file"),
@@ -391,8 +428,9 @@ def create_sft_trainer(
             processor=processor,
             tokenizer=tokenizer,
             max_frames=video_config.get("max_frames", 32),
-            use_relative_timestamps=temporal_config.get("use_relative_timestamps", True),
-            num_bins=temporal_config.get("num_bins", 100),
+            use_relative_timestamps=temporal_cfg.get("use_relative_timestamps", True),
+            num_bins=temporal_cfg.get("num_bins", 100),
+            use_temporal_tokens=use_temporal_tokens,
         )
     
     if eval_dataset is None and data_config is not None:
@@ -400,14 +438,16 @@ def create_sft_trainer(
         if validation_config.get("annotation_file"):
             from datasets.video_dataset import VideoTemporalSFTDataset
             
+            temporal_cfg = data_config.get("temporal", {})
             eval_dataset = VideoTemporalSFTDataset(
                 annotation_file=validation_config.get("annotation_file"),
                 video_dir=data_config.get("dataset", {}).get("video_dir"),
                 processor=processor,
                 tokenizer=tokenizer,
                 max_frames=data_config.get("video", {}).get("max_frames", 32),
-                use_relative_timestamps=data_config.get("temporal", {}).get("use_relative_timestamps", True),
-                num_bins=data_config.get("temporal", {}).get("num_bins", 100),
+                use_relative_timestamps=temporal_cfg.get("use_relative_timestamps", True),
+                num_bins=temporal_cfg.get("num_bins", 100),
+                use_temporal_tokens=use_temporal_tokens,
             )
     
     # Create data collator
