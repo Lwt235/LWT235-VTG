@@ -98,6 +98,84 @@ class TestVideoDataset:
         assert 32 <= item["temporal_bins"][1] <= 34
 
 
+class TestJSONArrayFormat:
+    """Tests for JSON array format support."""
+
+    @pytest.fixture
+    def json_array_annotations(self):
+        """Create sample annotation file in JSON array format."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.json"
+
+            samples = [
+                {
+                    "video": "timerft_data/ZMlcrfpgiIY.mp4",
+                    "duration": 154.31378074801725,
+                    "timestamp": [101.0, 137.0],
+                    "sentence": "The video shows a room with a bed and window.",
+                    "qid": "my|cosmo|ZMlcrfpgiIY|test",
+                    "video_start": None,
+                    "video_end": None,
+                    "difficulty": 24.083333333333336,
+                    "pred": [108.0, 116.67],
+                },
+                {
+                    "video": "timerft_data/cdjYrjRtUNA.mp4",
+                    "duration": 114.2141,
+                    "timestamp": [28.0, 34.0],
+                    "sentence": "A black Chevrolet HHR LT SUV is parked in a snowy lot.",
+                    "qid": "my|cosmo|cdjYrjRtUNA|test",
+                    "video_start": None,
+                    "video_end": None,
+                    "difficulty": 14.705882352941178,
+                    "pred": [0.0, 33.0],
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                json.dump(samples, f, indent=4)
+
+            yield annotation_path
+
+    def test_json_array_loading(self, json_array_annotations):
+        """Test loading dataset from JSON array format."""
+        dataset = VideoTemporalDataset(annotation_file=json_array_annotations)
+
+        assert len(dataset) == 2
+
+    def test_json_array_item_contents(self, json_array_annotations):
+        """Test contents of items loaded from JSON array format."""
+        dataset = VideoTemporalDataset(annotation_file=json_array_annotations)
+
+        item = dataset[0]
+
+        assert "video_path" in item
+        assert "query" in item
+        assert "timestamp" in item
+        assert item["query"] == "The video shows a room with a bed and window."
+        assert item["timestamp"] == [101.0, 137.0]
+
+    def test_json_array_sft_dataset(self, json_array_annotations):
+        """Test SFT dataset with JSON array format."""
+        dataset = VideoTemporalSFTDataset(annotation_file=json_array_annotations)
+
+        item = dataset[0]
+
+        assert "prompt" in item
+        assert "response" in item
+        assert "messages" in item
+
+    def test_json_array_rl_dataset(self, json_array_annotations):
+        """Test RL dataset with JSON array format."""
+        dataset = VideoTemporalRLDataset(annotation_file=json_array_annotations)
+
+        item = dataset[0]
+
+        assert "prompt" in item
+        assert "ground_truth" in item
+        assert "messages" in item
+
+
 class TestSFTDataset:
     """Tests for SFT dataset."""
 

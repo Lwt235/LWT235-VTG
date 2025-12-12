@@ -72,24 +72,51 @@ class VideoTemporalDataset(Dataset):
         logger.info(f"Loaded {len(self.samples)} samples from {annotation_file}")
 
     def _load_annotations(self) -> List[Dict[str, Any]]:
-        """Load and parse annotation file."""
+        """Load and parse annotation file.
+        
+        Supports two formats:
+        1. JSON array format: A single JSON array containing annotation objects
+        2. JSONL format: One JSON object per line (legacy format)
+        """
         samples = []
 
         if not self.annotation_file.exists():
             raise FileNotFoundError(f"Annotation file not found: {self.annotation_file}")
 
         with open(self.annotation_file, "r", encoding="utf-8") as f:
-            for line_num, line in enumerate(f, start=1):
-                line = line.strip()
-                if not line:
-                    continue
+            content = f.read().strip()
 
-                try:
-                    sample = json.loads(line)
-                    sample["_line_num"] = line_num
-                    samples.append(sample)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Line {line_num}: Invalid JSON: {e}")
+        if not content:
+            return samples
+
+        # Try to parse as JSON array first
+        try:
+            data = json.loads(content)
+            if isinstance(data, list):
+                # JSON array format
+                for idx, sample in enumerate(data, start=1):
+                    if isinstance(sample, dict):
+                        sample["_line_num"] = idx
+                        samples.append(sample)
+                    else:
+                        logger.warning(f"Item {idx}: Expected dict, got {type(sample).__name__}")
+                return samples
+        except json.JSONDecodeError:
+            # Not valid JSON array, try JSONL format
+            pass
+
+        # Fall back to JSONL format (one JSON per line)
+        for line_num, line in enumerate(content.split('\n'), start=1):
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                sample = json.loads(line)
+                sample["_line_num"] = line_num
+                samples.append(sample)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Line {line_num}: Invalid JSON: {e}")
 
         return samples
 
