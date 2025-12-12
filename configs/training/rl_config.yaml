@@ -32,9 +32,12 @@ lora:
     - "gate_proj"
     - "up_proj"
     - "down_proj"
-    - "lm_head"
   bias: "none"
   task_type: "CAUSAL_LM"
+  # Modules to fully train (not LoRA) - required for temporal tokens
+  modules_to_save:
+    - "embed_tokens"
+    - "lm_head"
 
 # GRPO-specific configuration
 grpo:

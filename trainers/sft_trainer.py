@@ -344,6 +344,20 @@ def create_sft_trainer(
     if lora_config.get("enabled", False):
         logger.info("Applying LoRA configuration")
         
+        # Get modules_to_save, ensuring embed_tokens and lm_head are included
+        # when using temporal tokens for proper adaptation
+        modules_to_save = lora_config.get("modules_to_save", [])
+        if use_temporal_tokens:
+            # Ensure embed_tokens and lm_head are in modules_to_save
+            # These need to be fully trained (not just LoRA) for new token embeddings
+            if modules_to_save is None:
+                modules_to_save = []
+            if "embed_tokens" not in modules_to_save:
+                modules_to_save.append("embed_tokens")
+            if "lm_head" not in modules_to_save:
+                modules_to_save.append("lm_head")
+            logger.info(f"Temporal tokens enabled: fully training {modules_to_save}")
+        
         peft_config = LoraConfig(
             r=lora_config.get("r", 64),
             lora_alpha=lora_config.get("lora_alpha", 128),
@@ -351,7 +365,7 @@ def create_sft_trainer(
             target_modules=lora_config.get("target_modules", ["q_proj", "v_proj"]),
             bias=lora_config.get("bias", "none"),
             task_type=TaskType.CAUSAL_LM,
-            modules_to_save=lora_config.get("modules_to_save"),
+            modules_to_save=modules_to_save if modules_to_save else None,
         )
         
         model = get_peft_model(model, peft_config)
