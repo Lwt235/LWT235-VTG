@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 import torch
 
-from datasets.video_dataset import (
+from vtg_datasets.video_dataset import (
     VideoTemporalDataset,
     VideoTemporalSFTDataset,
     VideoTemporalRLDataset,
 )
-from datasets.collate_fns import (
+from vtg_datasets.collate_fns import (
     pad_temporal_sequences,
     create_temporal_mask,
 )
@@ -22,13 +22,13 @@ from datasets.collate_fns import (
 
 class TestVideoDataset:
     """Tests for VideoTemporalDataset."""
-    
+
     @pytest.fixture
     def sample_annotations(self):
         """Create sample annotation file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             annotation_path = Path(tmpdir) / "train.jsonl"
-            
+
             samples = [
                 {
                     "video": "./videos/test1.mp4",
@@ -45,53 +45,53 @@ class TestVideoDataset:
                     "qid": "test_query_001",
                 },
             ]
-            
+
             with open(annotation_path, "w") as f:
                 for sample in samples:
                     f.write(json.dumps(sample) + "\n")
-            
+
             yield annotation_path
-    
+
     def test_dataset_loading(self, sample_annotations):
         """Test loading dataset from annotations."""
         dataset = VideoTemporalDataset(annotation_file=sample_annotations)
-        
+
         assert len(dataset) == 2
-    
+
     def test_getitem(self, sample_annotations):
         """Test getting single item."""
         dataset = VideoTemporalDataset(annotation_file=sample_annotations)
-        
+
         item = dataset[0]
-        
+
         assert "video_path" in item
         assert "query" in item
         assert "timestamp" in item
         assert "normalized_timestamp" in item
         assert "temporal_bins" in item
-    
+
     def test_normalized_timestamps(self, sample_annotations):
         """Test timestamp normalization."""
         dataset = VideoTemporalDataset(
             annotation_file=sample_annotations,
             use_relative_timestamps=True,
         )
-        
+
         item = dataset[0]
-        
+
         # 5/30 = 0.167, 10/30 = 0.333
         assert 0.16 < item["normalized_timestamp"][0] < 0.17
         assert 0.33 < item["normalized_timestamp"][1] < 0.34
-    
+
     def test_temporal_bins(self, sample_annotations):
         """Test temporal binning."""
         dataset = VideoTemporalDataset(
             annotation_file=sample_annotations,
             num_bins=100,
         )
-        
+
         item = dataset[0]
-        
+
         # Normalized timestamps are [5/30, 10/30] = [0.167, 0.333]
         # Binned: [16, 33]
         assert 15 <= item["temporal_bins"][0] <= 17
@@ -100,13 +100,13 @@ class TestVideoDataset:
 
 class TestSFTDataset:
     """Tests for SFT dataset."""
-    
+
     @pytest.fixture
     def sample_annotations(self):
         """Create sample annotation file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             annotation_path = Path(tmpdir) / "train.jsonl"
-            
+
             samples = [
                 {
                     "video": "./videos/test1.mp4",
@@ -115,19 +115,19 @@ class TestSFTDataset:
                     "sentence": "A person opens the door",
                 },
             ]
-            
+
             with open(annotation_path, "w") as f:
                 for sample in samples:
                     f.write(json.dumps(sample) + "\n")
-            
+
             yield annotation_path
-    
+
     def test_sft_dataset_format(self, sample_annotations):
         """Test SFT dataset output format."""
         dataset = VideoTemporalSFTDataset(annotation_file=sample_annotations)
-        
+
         item = dataset[0]
-        
+
         assert "prompt" in item
         assert "response" in item
         assert "messages" in item
@@ -136,13 +136,13 @@ class TestSFTDataset:
 
 class TestRLDataset:
     """Tests for RL dataset."""
-    
+
     @pytest.fixture
     def sample_annotations(self):
         """Create sample annotation file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             annotation_path = Path(tmpdir) / "train.jsonl"
-            
+
             samples = [
                 {
                     "video": "./videos/test1.mp4",
@@ -151,19 +151,19 @@ class TestRLDataset:
                     "sentence": "A person opens the door",
                 },
             ]
-            
+
             with open(annotation_path, "w") as f:
                 for sample in samples:
                     f.write(json.dumps(sample) + "\n")
-            
+
             yield annotation_path
-    
+
     def test_rl_dataset_format(self, sample_annotations):
         """Test RL dataset output format."""
         dataset = VideoTemporalRLDataset(annotation_file=sample_annotations)
-        
+
         item = dataset[0]
-        
+
         assert "prompt" in item
         assert "ground_truth" in item
         assert "messages" in item
@@ -172,7 +172,7 @@ class TestRLDataset:
 
 class TestCollateFunctions:
     """Tests for collate functions."""
-    
+
     def test_pad_temporal_sequences(self):
         """Test padding temporal sequences."""
         sequences = [
@@ -180,19 +180,19 @@ class TestCollateFunctions:
             torch.tensor([4, 5]),
             torch.tensor([6, 7, 8, 9]),
         ]
-        
+
         padded = pad_temporal_sequences(sequences)
-        
+
         assert padded.shape == (3, 4)
         assert padded[1, 2] == 0  # Padding
         assert padded[1, 3] == 0  # Padding
-    
+
     def test_create_temporal_mask(self):
         """Test creating temporal mask."""
         lengths = [3, 2, 4]
-        
+
         mask = create_temporal_mask(lengths)
-        
+
         assert mask.shape == (3, 4)
         assert mask[0, 0] == True
         assert mask[0, 2] == True

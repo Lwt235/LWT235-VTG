@@ -15,7 +15,7 @@
 #   --num_gpus       Number of GPUs to use (default: 1)
 #
 # Example:
-#   ./scripts/sft.sh --num_gpus 4 --deepspeed configs/deepspeed/ds_zero2.json
+#   ./scripts/sft.sh --num_gpus 2 --gpus 0,1 --deepspeed configs/deepspeed/ds_zero2.json
 # ============================================================================
 
 set -e
@@ -26,6 +26,7 @@ DATA_CONFIG="configs/data/video_config.yaml"
 DEEPSPEED=""
 OUTPUT_DIR="./outputs/sft"
 NUM_GPUS=1
+GPUS=""
 MASTER_PORT=29500
 
 # Parse arguments
@@ -51,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             NUM_GPUS="$2"
             shift 2
             ;;
+        --gpus)
+            GPUS="$2"
+            shift 2
+            ;;
         --master_port)
             MASTER_PORT="$2"
             shift 2
@@ -61,6 +66,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Set visible GPUs if specified
+if [[ -n "${GPUS}" ]]; then
+    export CUDA_VISIBLE_DEVICES=${GPUS}
+    echo "Set CUDA_VISIBLE_DEVICES=${GPUS}"
+fi
 
 # Create output directory
 mkdir -p "${OUTPUT_DIR}"
