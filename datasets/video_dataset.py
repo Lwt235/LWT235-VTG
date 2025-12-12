@@ -14,6 +14,11 @@ import torch
 from torch.utils.data import Dataset
 
 from utils.logging_utils import get_logger
+from utils.temporal_tokens import (
+    format_temporal_response,
+    timestamp_to_temporal_tokens,
+    NUM_TEMPORAL_TOKENS,
+)
 
 logger = get_logger(__name__)
 
@@ -34,6 +39,7 @@ class VideoTemporalDataset(Dataset):
         max_frames: int = 32,
         use_relative_timestamps: bool = True,
         num_bins: int = 100,
+        use_temporal_tokens: bool = False,
         transform: Optional[Callable] = None,
     ):
         """
@@ -47,6 +53,7 @@ class VideoTemporalDataset(Dataset):
             max_frames: Maximum number of frames to sample.
             use_relative_timestamps: Whether to normalize timestamps to [0, 1].
             num_bins: Number of temporal bins for discretization.
+            use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             transform: Optional transform to apply to samples.
         """
         self.annotation_file = Path(annotation_file)
@@ -56,6 +63,7 @@ class VideoTemporalDataset(Dataset):
         self.max_frames = max_frames
         self.use_relative_timestamps = use_relative_timestamps
         self.num_bins = num_bins
+        self.use_temporal_tokens = use_temporal_tokens
         self.transform = transform
 
         # Load annotations
@@ -141,6 +149,16 @@ class VideoTemporalDataset(Dataset):
             "sample_idx": idx,
         }
 
+        # Add temporal tokens if enabled
+        if self.use_temporal_tokens:
+            start_token, end_token = timestamp_to_temporal_tokens(
+                start_time, end_time, duration, NUM_TEMPORAL_TOKENS
+            )
+            result["temporal_tokens"] = [start_token, end_token]
+            result["temporal_response"] = format_temporal_response(
+                start_time, end_time, duration, NUM_TEMPORAL_TOKENS
+            )
+
         # Include additional kwargs
         if "kwargs" in sample:
             result["metadata"] = sample["kwargs"]
@@ -206,6 +224,13 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         "Provide the answer in the format: <start_time><end_time>"
     )
 
+    # Prompt template for temporal tokens mode
+    TEMPORAL_TOKEN_PROMPT = (
+        "Given the video, please identify the start and end time of the moment "
+        "described by the following query: \"{query}\"\n"
+        "Provide the answer using temporal tokens in the format: <start><end>"
+    )
+
     def __init__(
         self,
         annotation_file: Union[str, Path],
@@ -215,6 +240,7 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         max_frames: int = 32,
         use_relative_timestamps: bool = True,
         num_bins: int = 100,
+        use_temporal_tokens: bool = False,
         prompt_template: Optional[str] = None,
         response_template: Optional[str] = None,
         transform: Optional[Callable] = None,
@@ -230,6 +256,7 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             max_frames: Maximum number of frames to sample.
             use_relative_timestamps: Whether to normalize timestamps to [0, 1].
             num_bins: Number of temporal bins for discretization.
+            use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             prompt_template: Custom prompt template with {query} placeholder.
             response_template: Custom response template with {start} and {end} placeholders.
             transform: Optional transform to apply to samples.
@@ -242,11 +269,18 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             max_frames=max_frames,
             use_relative_timestamps=use_relative_timestamps,
             num_bins=num_bins,
+            use_temporal_tokens=use_temporal_tokens,
             transform=transform,
         )
 
-        self.prompt_template = prompt_template or self.DEFAULT_PROMPT
-        self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
+        # Set prompt and response templates based on temporal tokens mode
+        if use_temporal_tokens:
+            self.prompt_template = prompt_template or self.TEMPORAL_TOKEN_PROMPT
+            # Response template not used with temporal tokens (generated dynamically)
+            self.response_template = None
+        else:
+            self.prompt_template = prompt_template or self.DEFAULT_PROMPT
+            self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
@@ -256,12 +290,15 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         prompt = self.prompt_template.format(query=sample["query"])
 
         # Format response (ground truth)
-        if self.use_relative_timestamps:
-            start, end = sample["normalized_timestamp"]
+        if self.use_temporal_tokens:
+            # Use temporal tokens from base dataset
+            response = sample.get("temporal_response", "")
         else:
-            start, end = sample["timestamp"]
-
-        response = self.response_template.format(start=start, end=end)
+            if self.use_relative_timestamps:
+                start, end = sample["normalized_timestamp"]
+            else:
+                start, end = sample["timestamp"]
+            response = self.response_template.format(start=start, end=end)
 
         sample["prompt"] = prompt
         sample["response"] = response
@@ -317,6 +354,11 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         "Respond with the start and end times of the relevant segment."
     )
 
+    TEMPORAL_TOKEN_PROMPT = (
+        "Watch the video and identify when the following event occurs: \"{query}\"\n"
+        "Respond with the temporal tokens indicating start and end times."
+    )
+
     def __init__(
         self,
         annotation_file: Union[str, Path],
@@ -326,6 +368,7 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         max_frames: int = 32,
         use_relative_timestamps: bool = True,
         num_bins: int = 100,
+        use_temporal_tokens: bool = False,
         prompt_template: Optional[str] = None,
         transform: Optional[Callable] = None,
     ):
@@ -340,6 +383,7 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             max_frames: Maximum number of frames to sample.
             use_relative_timestamps: Whether to normalize timestamps to [0, 1].
             num_bins: Number of temporal bins for discretization.
+            use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             prompt_template: Custom prompt template with {query} placeholder.
             transform: Optional transform to apply to samples.
         """
@@ -351,10 +395,15 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             max_frames=max_frames,
             use_relative_timestamps=use_relative_timestamps,
             num_bins=num_bins,
+            use_temporal_tokens=use_temporal_tokens,
             transform=transform,
         )
 
-        self.prompt_template = prompt_template or self.DEFAULT_PROMPT
+        # Set prompt template based on temporal tokens mode
+        if use_temporal_tokens:
+            self.prompt_template = prompt_template or self.TEMPORAL_TOKEN_PROMPT
+        else:
+            self.prompt_template = prompt_template or self.DEFAULT_PROMPT
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
@@ -365,11 +414,17 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         sample["prompt"] = prompt
 
         # Store ground truth for reward computation
-        sample["ground_truth"] = {
+        ground_truth = {
             "timestamp": sample["timestamp"],
             "normalized_timestamp": sample["normalized_timestamp"],
             "duration": sample["duration"],
         }
+
+        # Add temporal tokens info if enabled
+        if self.use_temporal_tokens and "temporal_tokens" in sample:
+            ground_truth["temporal_tokens"] = sample["temporal_tokens"]
+
+        sample["ground_truth"] = ground_truth
 
         # Create messages for generation
         sample["messages"] = self._create_prompt_messages(sample, prompt)

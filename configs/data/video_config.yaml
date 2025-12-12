@@ -48,6 +48,11 @@ temporal:
   num_bins: 100
   # Whether to use relative timestamps (0-1) or absolute
   use_relative_timestamps: true
+  # Whether to use temporal tokens (<0>~<999>) instead of float values
+  # When enabled, replaces tokens at IDs 150643-151642 with <0>-<999>
+  use_temporal_tokens: false
+  # Embedding initialization strategy for temporal tokens: "mean", "random", "copy_existing"
+  embedding_init_strategy: "mean"
   # Output format: "tokens" for text generation, "class" for classification
   output_format: "tokens"
   # Temporal output tokens (for token replacement)
