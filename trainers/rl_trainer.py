@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from transformers import (
-    AutoModelForCausalLM,
+    Qwen3VLForConditionalGeneration,
     AutoProcessor,
     AutoTokenizer,
     PreTrainedModel,
@@ -497,9 +497,9 @@ def create_rl_trainer(
     # Load model
     torch_dtype = getattr(torch, model_config.get("torch_dtype", "bfloat16"))
     
-    model = AutoModelForCausalLM.from_pretrained(
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_name,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         trust_remote_code=model_config.get("trust_remote_code", True),
         attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )
@@ -526,9 +526,9 @@ def create_rl_trainer(
     ref_model = None
     
     if ref_model_config.get("name_or_path"):
-        ref_model = AutoModelForCausalLM.from_pretrained(
+        ref_model = Qwen3VLForConditionalGeneration.from_pretrained(
             ref_model_config["name_or_path"],
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             trust_remote_code=True,
         )
         ref_model.eval()
