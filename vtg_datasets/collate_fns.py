@@ -97,7 +97,7 @@ class SFTCollator:
             # Note: Disable truncation when processing videos to avoid mismatch
             # between video token placeholders in text and actual video inputs.
             # The Qwen VL processor cannot properly handle truncation of video tokens.
-            has_videos = flat_videos and len(flat_videos) > 0
+            has_videos = bool(flat_videos)
             model_inputs = self.processor(
                 text=texts,
                 images=image_inputs if any(image_inputs) else None,
@@ -249,7 +249,7 @@ class RLCollator:
             
             # Note: Disable truncation when processing videos to avoid mismatch
             # between video token placeholders in text and actual video inputs.
-            has_videos = flat_videos and len(flat_videos) > 0
+            has_videos = bool(flat_videos)
             prompt_inputs = self.processor(
                 text=texts,
                 videos=flat_videos if flat_videos else None,
