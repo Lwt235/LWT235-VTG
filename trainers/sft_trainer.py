@@ -396,7 +396,7 @@ def create_sft_trainer(
     if isinstance(training_config, DictConfig):
         training_config = OmegaConf.to_container(training_config, resolve=True)
 
-    # Get gradient_checkpointing_kwargs with proper type conversion
+    # Get gradient_checkpointing_kwargs (already converted to native Python dict above)
     gradient_checkpointing_kwargs = training_config.get("gradient_checkpointing_kwargs", {"use_reentrant": False})
 
     training_args = TrainingArguments(
