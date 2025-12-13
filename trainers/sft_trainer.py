@@ -85,7 +85,7 @@ class VideoTemporalSFTTrainer(Trainer):
             args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,  # Use processing_class instead of deprecated tokenizer
             data_collator=data_collator,
             compute_metrics=compute_metrics,
             callbacks=callbacks,

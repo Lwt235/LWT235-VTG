@@ -94,13 +94,17 @@ class SFTCollator:
                     flat_video_metadata.extend(metas)
             
             # Tokenize
+            # Note: Disable truncation when processing videos to avoid mismatch
+            # between video token placeholders in text and actual video inputs.
+            # The Qwen VL processor cannot properly handle truncation of video tokens.
+            has_videos = flat_videos and len(flat_videos) > 0
             model_inputs = self.processor(
                 text=texts,
                 images=image_inputs if any(image_inputs) else None,
                 videos=flat_videos if flat_videos else None,
                 video_metadata=flat_video_metadata if flat_video_metadata else None,
                 padding=self.padding,
-                truncation=self.truncation,
+                truncation=False if has_videos else self.truncation,
                 max_length=self.max_length,
                 return_tensors=self.return_tensors,
                 do_resize=False,
@@ -243,12 +247,15 @@ class RLCollator:
                     flat_videos.extend(vids)
                     flat_video_metadata.extend(metas)
             
+            # Note: Disable truncation when processing videos to avoid mismatch
+            # between video token placeholders in text and actual video inputs.
+            has_videos = flat_videos and len(flat_videos) > 0
             prompt_inputs = self.processor(
                 text=texts,
                 videos=flat_videos if flat_videos else None,
                 video_metadata=flat_video_metadata if flat_video_metadata else None,
                 padding=self.padding,
-                truncation=self.truncation,
+                truncation=False if has_videos else self.truncation,
                 max_length=self.max_prompt_length,
                 return_tensors=self.return_tensors,
                 do_resize=False,
