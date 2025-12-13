@@ -85,7 +85,7 @@ class VideoTemporalSFTTrainer(Trainer):
             args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,  # Use processing_class instead of deprecated tokenizer
             data_collator=data_collator,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
@@ -333,6 +333,20 @@ def create_sft_trainer(
         attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )
 
+    # Sync model config with tokenizer special tokens to avoid mismatch warnings
+    # This ensures consistency between the tokenizer and model configurations
+    configs_to_sync = [model.config]
+    if hasattr(model, "generation_config"):
+        configs_to_sync.append(model.generation_config)
+    
+    for cfg in configs_to_sync:
+        if tokenizer.pad_token_id is not None:
+            cfg.pad_token_id = tokenizer.pad_token_id
+        if tokenizer.eos_token_id is not None:
+            cfg.eos_token_id = tokenizer.eos_token_id
+        if tokenizer.bos_token_id is not None:
+            cfg.bos_token_id = tokenizer.bos_token_id
+
     # Initialize temporal token embeddings if enabled
     if use_temporal_tokens:
         logger.info("Initializing temporal token embeddings with sinusoidal encoding")
@@ -347,18 +361,20 @@ def create_sft_trainer(
         # Get target modules from config
         target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
 
-        # When using temporal tokens, ensure embed_tokens and lm_head are included
-        # in target_modules for proper adaptation to new token embeddings
+        # When using temporal tokens, ensure embed_tokens is included in target_modules
+        # for proper adaptation to new token embeddings.
+        # Note: We only add embed_tokens (not lm_head) because when tie_word_embeddings=True,
+        # lm_head shares weights with embed_tokens. Adding both would cause PEFT warnings
+        # and complications during adapter merging. See: https://github.com/huggingface/peft/issues/2018
         if use_temporal_tokens:
-            if isinstance(target_modules, list):
-                target_modules = list(target_modules)  # Make a copy
-            else:
-                target_modules = list(target_modules)
+            # Make a copy to avoid modifying the original config
+            target_modules = list(target_modules)
 
             if "embed_tokens" not in target_modules:
                 target_modules.append("embed_tokens")
-            if "lm_head" not in target_modules:
-                target_modules.append("lm_head")
+            # Remove lm_head if present (it shares weights with embed_tokens)
+            if "lm_head" in target_modules:
+                target_modules.remove("lm_head")
             logger.info(f"Temporal tokens enabled: target_modules = {target_modules}")
 
         peft_config = LoraConfig(
