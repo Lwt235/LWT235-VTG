@@ -359,8 +359,10 @@ def create_sft_trainer(
     if lora_config.get("enabled", False):
         logger.info("Applying LoRA configuration")
 
-        # Get target modules from config
+        # Get target modules from config and convert to list (OmegaConf -> Python)
         target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
+        if hasattr(target_modules, "__iter__") and not isinstance(target_modules, (str, list)):
+            target_modules = list(target_modules)
 
         # When using temporal tokens, use trainable_token_indices for efficient training
         # This method only trains the specific new tokens without modifying the full embedding matrix.
@@ -389,7 +391,13 @@ def create_sft_trainer(
         model.print_trainable_parameters()
 
     # Create training arguments
+    # Convert OmegaConf to native Python types for JSON serialization compatibility (e.g., W&B)
     training_config = config.get("training", {})
+    if isinstance(training_config, DictConfig):
+        training_config = OmegaConf.to_container(training_config, resolve=True)
+
+    # Get gradient_checkpointing_kwargs (already converted to native Python dict above)
+    gradient_checkpointing_kwargs = training_config.get("gradient_checkpointing_kwargs", {"use_reentrant": False})
 
     training_args = TrainingArguments(
         output_dir=training_config.get("output_dir", "./outputs/sft"),
@@ -411,7 +419,7 @@ def create_sft_trainer(
         bf16=training_config.get("bf16", True),
         fp16=training_config.get("fp16", False),
         gradient_checkpointing=training_config.get("gradient_checkpointing", True),
-        gradient_checkpointing_kwargs=training_config.get("gradient_checkpointing_kwargs", {"use_reentrant": False}),
+        gradient_checkpointing_kwargs=gradient_checkpointing_kwargs,
         logging_dir=training_config.get("logging_dir", "./outputs/sft/logs"),
         logging_steps=training_config.get("logging_steps", 10),
         logging_strategy=training_config.get("logging_strategy", "steps"),
