@@ -98,18 +98,25 @@ class SFTCollator:
             # between video token placeholders in text and actual video inputs.
             # The Qwen VL processor cannot properly handle truncation of video tokens.
             has_videos = bool(flat_videos)
-            model_inputs = self.processor(
-                text=texts,
-                images=image_inputs if any(image_inputs) else None,
-                videos=flat_videos if flat_videos else None,
-                video_metadata=flat_video_metadata if flat_video_metadata else None,
-                padding=self.padding,
-                truncation=False if has_videos else self.truncation,
-                max_length=self.max_length,
-                return_tensors=self.return_tensors,
-                do_resize=False,
-                **all_video_kwargs,
-            )
+            
+            # Build processor kwargs - only include max_length when truncation is enabled
+            # to avoid warning about max_length being ignored
+            processor_kwargs = {
+                "text": texts,
+                "images": image_inputs if any(image_inputs) else None,
+                "videos": flat_videos if flat_videos else None,
+                "video_metadata": flat_video_metadata if flat_video_metadata else None,
+                "padding": self.padding,
+                "truncation": False if has_videos else self.truncation,
+                "return_tensors": self.return_tensors,
+                "do_resize": False,
+            }
+            # Only pass max_length when truncation is enabled
+            if not has_videos and self.truncation:
+                processor_kwargs["max_length"] = self.max_length
+            processor_kwargs.update(all_video_kwargs)
+            
+            model_inputs = self.processor(**processor_kwargs)
             
         except ImportError:
             logger.warning(
@@ -250,17 +257,24 @@ class RLCollator:
             # Note: Disable truncation when processing videos to avoid mismatch
             # between video token placeholders in text and actual video inputs.
             has_videos = bool(flat_videos)
-            prompt_inputs = self.processor(
-                text=texts,
-                videos=flat_videos if flat_videos else None,
-                video_metadata=flat_video_metadata if flat_video_metadata else None,
-                padding=self.padding,
-                truncation=False if has_videos else self.truncation,
-                max_length=self.max_prompt_length,
-                return_tensors=self.return_tensors,
-                do_resize=False,
-                **all_video_kwargs,
-            )
+            
+            # Build processor kwargs - only include max_length when truncation is enabled
+            # to avoid warning about max_length being ignored
+            processor_kwargs = {
+                "text": texts,
+                "videos": flat_videos if flat_videos else None,
+                "video_metadata": flat_video_metadata if flat_video_metadata else None,
+                "padding": self.padding,
+                "truncation": False if has_videos else self.truncation,
+                "return_tensors": self.return_tensors,
+                "do_resize": False,
+            }
+            # Only pass max_length when truncation is enabled
+            if not has_videos and self.truncation:
+                processor_kwargs["max_length"] = self.max_prompt_length
+            processor_kwargs.update(all_video_kwargs)
+            
+            prompt_inputs = self.processor(**processor_kwargs)
             
         except ImportError:
             logger.warning(
