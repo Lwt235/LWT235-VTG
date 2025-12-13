@@ -531,8 +531,10 @@ def create_rl_trainer(
     if lora_config.get("enabled", False) and not isinstance(model, PeftModel):
         logger.info("Applying LoRA configuration")
 
-        # Get target modules from config
+        # Get target modules from config and convert to list (OmegaConf -> Python)
         target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
+        if hasattr(target_modules, "__iter__") and not isinstance(target_modules, (str, list)):
+            target_modules = list(target_modules)
 
         # When using temporal tokens, use trainable_token_indices for efficient training
         # This method only trains the specific new tokens without modifying the full embedding matrix.
