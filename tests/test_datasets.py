@@ -354,23 +354,28 @@ class TestTemporalTokensInDataset:
         assert item["ground_truth"]["temporal_tokens"] == ["<250>", "<500>"]
 
 
-class TestEdgeCases:
-    """Tests for edge case handling in datasets."""
+class TestVideoMetadata:
+    """Tests for video metadata handling in datasets."""
 
     @pytest.fixture
-    def zero_duration_annotations(self):
-        """Create sample annotation file with edge case durations."""
+    def annotations_with_video_metadata(self):
+        """Create sample annotation file with video_start and video_end metadata."""
         with tempfile.TemporaryDirectory() as tmpdir:
             annotation_path = Path(tmpdir) / "train.jsonl"
 
-            # Sample where video_start equals duration (would result in zero duration)
+            # Sample with video_start and video_end metadata
+            # In the annotation file, duration and timestamp are already adjusted during annotation creation:
+            # - duration is the actual video segment duration (30.0 seconds here)
+            # - timestamp values are relative to segment start (not absolute video time)
+            # video_start/video_end are metadata for video loading only
             samples = [
                 {
                     "video": "./videos/test1.mp4",
-                    "duration": 30.0,
-                    "timestamp": [5.0, 10.0],
+                    "duration": 30.0,  # Already the trimmed duration
+                    "timestamp": [5.0, 10.0],  # Already offset from video_start
                     "sentence": "A person opens the door",
-                    "video_start": 30.0,  # This would make duration = 0
+                    "video_start": 10.0,  # Metadata for video loading
+                    "video_end": 40.0,  # Metadata for video loading
                 },
             ]
 
@@ -380,20 +385,24 @@ class TestEdgeCases:
 
             yield annotation_path
 
-    def test_dataset_handles_zero_duration(self, zero_duration_annotations):
-        """Test that dataset handles cases where trimming would cause zero duration."""
+    def test_video_metadata_passed_through(self, annotations_with_video_metadata):
+        """Test that video_start and video_end metadata is preserved in dataset output."""
         dataset = VideoTemporalDataset(
-            annotation_file=zero_duration_annotations,
+            annotation_file=annotations_with_video_metadata,
             use_temporal_tokens=True,
         )
 
-        # Should not raise an error
         item = dataset[0]
 
-        # Duration should be positive
-        assert item["duration"] > 0
+        # Duration and timestamp should be used as-is (already adjusted in annotation)
+        assert item["duration"] == 30.0
+        assert item["timestamp"] == [5.0, 10.0]
 
-        # Temporal tokens should still be generated
+        # video_start and video_end should be passed through as metadata for video loading
+        assert item["video_start"] == 10.0
+        assert item["video_end"] == 40.0
+
+        # Temporal tokens should be generated based on the duration and timestamp
         assert "temporal_tokens" in item
         assert len(item["temporal_tokens"]) == 2
 
