@@ -321,7 +321,7 @@ class TestTemporalTokensInDataset:
 
         # Check temporal response is present
         assert "temporal_response" in item
-        assert item["temporal_response"] == "<250><500>"
+        assert item["temporal_response"] == "<|box_start|><250><500><|box_end|>"
 
     def test_sft_dataset_with_temporal_tokens(self, sample_annotations):
         """Test SFT dataset with temporal tokens enabled."""
@@ -334,7 +334,7 @@ class TestTemporalTokensInDataset:
 
         # Response should use temporal tokens format
         assert "response" in item
-        assert item["response"] == "<250><500>"
+        assert item["response"] == "<|box_start|><250><500><|box_end|>"
 
         # Prompt should mention temporal tokens
         assert "temporal tokens" in item["prompt"].lower()
@@ -352,6 +352,50 @@ class TestTemporalTokensInDataset:
         assert "ground_truth" in item
         assert "temporal_tokens" in item["ground_truth"]
         assert item["ground_truth"]["temporal_tokens"] == ["<250>", "<500>"]
+
+
+class TestEdgeCases:
+    """Tests for edge case handling in datasets."""
+
+    @pytest.fixture
+    def zero_duration_annotations(self):
+        """Create sample annotation file with edge case durations."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.jsonl"
+
+            # Sample where video_start equals duration (would result in zero duration)
+            samples = [
+                {
+                    "video": "./videos/test1.mp4",
+                    "duration": 30.0,
+                    "timestamp": [5.0, 10.0],
+                    "sentence": "A person opens the door",
+                    "video_start": 30.0,  # This would make duration = 0
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                for sample in samples:
+                    f.write(json.dumps(sample) + "\n")
+
+            yield annotation_path
+
+    def test_dataset_handles_zero_duration(self, zero_duration_annotations):
+        """Test that dataset handles cases where trimming would cause zero duration."""
+        dataset = VideoTemporalDataset(
+            annotation_file=zero_duration_annotations,
+            use_temporal_tokens=True,
+        )
+
+        # Should not raise an error
+        item = dataset[0]
+
+        # Duration should be positive
+        assert item["duration"] > 0
+
+        # Temporal tokens should still be generated
+        assert "temporal_tokens" in item
+        assert len(item["temporal_tokens"]) == 2
 
 
 if __name__ == "__main__":

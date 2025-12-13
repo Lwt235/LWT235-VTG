@@ -239,12 +239,12 @@ class TestFormatTemporalResponse:
     def test_basic_format(self):
         """Test basic response formatting."""
         response = format_temporal_response(5.0, 10.0, duration=20.0)
-        assert response == "<250><500>"
+        assert response == "<|box_start|><250><500><|box_end|>"
 
     def test_edge_cases(self):
         """Test edge case formatting."""
         response = format_temporal_response(0.0, 100.0, duration=100.0)
-        assert response == "<0><999>"
+        assert response == "<|box_start|><0><999><|box_end|>"
 
 
 class TestParseTemporalResponse:
