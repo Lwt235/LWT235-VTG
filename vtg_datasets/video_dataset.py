@@ -163,7 +163,9 @@ class VideoTemporalDataset(Dataset):
         # Ensure duration is positive to avoid errors in temporal token conversion
         if duration <= 0:
             # Fall back to original duration from sample if trimming resulted in invalid duration
-            duration = max(sample["duration"], 1e-6)
+            # Use max with 1e-6 to ensure a positive value even if original duration is also invalid
+            original_duration = sample["duration"]
+            duration = max(original_duration if original_duration > 0 else 1e-6, 1e-6)
             # Clamp timestamps to valid range
             start_time = max(0, min(start_time, duration))
             end_time = max(0, min(end_time, duration))
