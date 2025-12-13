@@ -69,11 +69,11 @@ def get_temporal_token_id(bin_index: int, tokenizer: Any = None) -> int:
         raise ValueError(
             f"Bin index must be between 0 and {NUM_TEMPORAL_TOKENS - 1}, got {bin_index}"
         )
-    
+
     if tokenizer is not None:
         token = get_temporal_token(bin_index)
         return tokenizer.convert_tokens_to_ids(token)
-    
+
     global _temporal_token_start_id
     if _temporal_token_start_id is None:
         raise ValueError(
@@ -253,7 +253,7 @@ def format_temporal_response(
     start_token, end_token = timestamp_to_temporal_tokens(
         start, end, duration, num_bins
     )
-    return f"{start_token}{end_token}"
+    return f"<|box_start|>{start_token}{end_token}<|box_end|>"
 
 
 def parse_temporal_response(
@@ -307,13 +307,13 @@ def get_temporal_token_ids(tokenizer: Any = None) -> List[int]:
         List of token IDs for all temporal tokens.
     """
     global _temporal_token_start_id, _temporal_token_end_id
-    
+
     if tokenizer is not None:
         return [
             tokenizer.convert_tokens_to_ids(get_temporal_token(i))
             for i in range(NUM_TEMPORAL_TOKENS)
         ]
-    
+
     if _temporal_token_start_id is None or _temporal_token_end_id is None:
         raise ValueError(
             "Temporal tokens not initialized. Call add_temporal_tokens_to_tokenizer first."
@@ -329,11 +329,11 @@ def create_sinusoidal_embeddings(
 ) -> torch.Tensor:
     """
     Create sinusoidal positional embeddings for temporal tokens.
-    
+
     Uses the same approach as transformer positional encodings:
     PE(pos, 2i) = sin(pos / 10000^(2i/d))
     PE(pos, 2i+1) = cos(pos / 10000^(2i/d))
-    
+
     This helps the model learn temporal ordering faster.
 
     Args:
@@ -346,31 +346,31 @@ def create_sinusoidal_embeddings(
         Tensor of shape (num_tokens, embedding_dim) with sinusoidal embeddings.
     """
     position = torch.arange(num_tokens, dtype=torch.float32).unsqueeze(1)
-    
+
     # Calculate div_term for both sin and cos
     half_dim = (embedding_dim + 1) // 2  # Handle odd dimensions
     div_term = torch.exp(
         torch.arange(0, half_dim, dtype=torch.float32)
         * (-math.log(10000.0) / embedding_dim)
     )
-    
+
     embeddings = torch.zeros(num_tokens, embedding_dim)
-    
+
     # Fill sin values for even indices
     sin_values = torch.sin(position * div_term)
     num_sin_cols = (embedding_dim + 1) // 2  # ceil(embedding_dim / 2)
     embeddings[:, 0::2] = sin_values[:, :num_sin_cols]
-    
+
     # Fill cos values for odd indices
     cos_values = torch.cos(position * div_term)
     num_cos_cols = embedding_dim // 2  # floor(embedding_dim / 2)
     embeddings[:, 1::2] = cos_values[:, :num_cos_cols]
-    
+
     if device is not None:
         embeddings = embeddings.to(device)
     if dtype is not None:
         embeddings = embeddings.to(dtype)
-    
+
     return embeddings
 
 
@@ -388,7 +388,7 @@ def add_temporal_tokens_to_tokenizer(tokenizer: Any) -> Dict[str, int]:
         Dictionary mapping temporal token strings to their IDs.
     """
     global _temporal_token_start_id, _temporal_token_end_id
-    
+
     temporal_tokens = get_all_temporal_tokens()
 
     # Record original vocab size (where new tokens will start)
@@ -416,11 +416,11 @@ def _get_existing_embeddings_mask(
 ) -> torch.Tensor:
     """
     Create a mask for existing (non-temporal) embeddings.
-    
+
     Args:
         total_size: Total vocabulary size.
         temporal_ids: List of temporal token IDs.
-    
+
     Returns:
         Boolean mask where True indicates existing embeddings.
     """
@@ -462,7 +462,7 @@ def initialize_temporal_embeddings(
 
     # Get temporal token IDs
     temporal_ids = get_temporal_token_ids(tokenizer)
-    
+
     # Create mask for existing embeddings (excluding temporal tokens)
     existing_mask = _get_existing_embeddings_mask(vocab_size, temporal_ids)
     existing_embeddings = weight[existing_mask]
@@ -476,11 +476,11 @@ def initialize_temporal_embeddings(
                 device=weight.device,
                 dtype=weight.dtype,
             )
-            
+
             # Scale to match existing embedding magnitude
             existing_std = existing_embeddings.std().item()
             sin_embeddings = sin_embeddings * existing_std
-            
+
             for i, token_id in enumerate(temporal_ids):
                 if token_id < weight.size(0):
                     weight[token_id] = sin_embeddings[i]

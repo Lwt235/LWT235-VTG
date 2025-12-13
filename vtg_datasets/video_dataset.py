@@ -73,7 +73,7 @@ class VideoTemporalDataset(Dataset):
 
     def _load_annotations(self) -> List[Dict[str, Any]]:
         """Load and parse annotation file.
-        
+
         Supports two formats:
         1. JSON array format: A single JSON array containing annotation objects
         2. JSONL format: One JSON object per line (legacy format)
@@ -202,12 +202,12 @@ class VideoTemporalDataset(Dataset):
         required_fields = set(REQUIRED_FIELDS) | {"_line_num"}
         optional_known_fields = {"video_start", "video_end"}
         all_known_fields = required_fields | optional_known_fields
-        
+
         metadata = {}
         for key, value in sample.items():
             if key not in all_known_fields:
                 metadata[key] = value
-        
+
         if metadata:
             result["metadata"] = metadata
 
@@ -269,14 +269,14 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
     DEFAULT_PROMPT = (
         "Given the video, please identify the start and end time of the moment "
         "described by the following query: \"{query}\"\n"
-        "Provide the answer in the format: <start_time><end_time>"
+        "Provide the answer in the format: [start_time, end_time]"
     )
 
     # Prompt template for temporal tokens mode
     TEMPORAL_TOKEN_PROMPT = (
         "Given the video, please identify the start and end time of the moment "
         "described by the following query: \"{query}\"\n"
-        "Provide the answer using temporal tokens in the format: <start><end>"
+        "Provide the answer using temporal tokens in the format: [start, end]"
     )
 
     def __init__(
