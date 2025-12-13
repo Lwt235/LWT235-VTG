@@ -67,6 +67,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+export NCCL_P2P_DISABLE=1
+
 # Set visible GPUs if specified
 if [[ -n "${GPUS}" ]]; then
     export CUDA_VISIBLE_DEVICES=${GPUS}
