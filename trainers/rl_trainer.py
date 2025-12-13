@@ -34,6 +34,7 @@ from utils.common import load_config, merge_configs, count_parameters
 from utils.temporal_tokens import (
     add_temporal_tokens_to_tokenizer,
     resize_model_embeddings_for_temporal_tokens,
+    get_temporal_token_ids,
 )
 from rewards import CompositeReward, create_composite_reward
 
@@ -533,19 +534,18 @@ def create_rl_trainer(
         # Get target modules from config
         target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
 
-        # When using temporal tokens, ensure embed_tokens and lm_head are included
-        # in target_modules for proper adaptation to new token embeddings
+        # When using temporal tokens, use trainable_token_indices for efficient training
+        # This method only trains the specific new tokens without modifying the full embedding matrix.
+        # Reference: https://huggingface.co/docs/peft/main/en/package_reference/lora#peft.LoraConfig
+        # "Efficiently train tokens alongside LoRA"
+        trainable_token_indices = None
         if use_temporal_tokens:
-            if isinstance(target_modules, list):
-                target_modules = list(target_modules)  # Make a copy
-            else:
-                target_modules = list(target_modules)
-
-            if "embed_tokens" not in target_modules:
-                target_modules.append("embed_tokens")
-            if "lm_head" not in target_modules:
-                target_modules.append("lm_head")
-            logger.info(f"Temporal tokens enabled: target_modules = {target_modules}")
+            # Get the token IDs for temporal tokens
+            temporal_token_ids = get_temporal_token_ids(tokenizer)
+            # Use trainable_token_indices parameter to efficiently train new tokens
+            # This saves memory compared to adding embed_tokens to target_modules
+            trainable_token_indices = {"embed_tokens": temporal_token_ids}
+            logger.info(f"Temporal tokens enabled: trainable_token_indices with {len(temporal_token_ids)} tokens")
 
         peft_config = LoraConfig(
             r=lora_config.get("r", 64),
@@ -554,6 +554,7 @@ def create_rl_trainer(
             target_modules=target_modules,
             bias=lora_config.get("bias", "none"),
             task_type=TaskType.CAUSAL_LM,
+            trainable_token_indices=trainable_token_indices,
         )
 
         model = get_peft_model(model, peft_config)

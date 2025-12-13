@@ -321,7 +321,7 @@ class TestTemporalTokensInDataset:
 
         # Check temporal response is present
         assert "temporal_response" in item
-        assert item["temporal_response"] == "<250><500>"
+        assert item["temporal_response"] == "<|box_start|><250><500><|box_end|>"
 
     def test_sft_dataset_with_temporal_tokens(self, sample_annotations):
         """Test SFT dataset with temporal tokens enabled."""
@@ -334,7 +334,7 @@ class TestTemporalTokensInDataset:
 
         # Response should use temporal tokens format
         assert "response" in item
-        assert item["response"] == "<250><500>"
+        assert item["response"] == "<|box_start|><250><500><|box_end|>"
 
         # Prompt should mention temporal tokens
         assert "temporal tokens" in item["prompt"].lower()
@@ -352,6 +352,59 @@ class TestTemporalTokensInDataset:
         assert "ground_truth" in item
         assert "temporal_tokens" in item["ground_truth"]
         assert item["ground_truth"]["temporal_tokens"] == ["<250>", "<500>"]
+
+
+class TestVideoMetadata:
+    """Tests for video metadata handling in datasets."""
+
+    @pytest.fixture
+    def annotations_with_video_metadata(self):
+        """Create sample annotation file with video_start and video_end metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.jsonl"
+
+            # Sample with video_start and video_end metadata
+            # In the annotation file, duration and timestamp are already adjusted during annotation creation:
+            # - duration is the actual video segment duration (30.0 seconds here)
+            # - timestamp values are relative to segment start (not absolute video time)
+            # video_start/video_end are metadata for video loading only
+            samples = [
+                {
+                    "video": "./videos/test1.mp4",
+                    "duration": 30.0,  # Already the trimmed duration
+                    "timestamp": [5.0, 10.0],  # Already offset from video_start
+                    "sentence": "A person opens the door",
+                    "video_start": 10.0,  # Metadata for video loading
+                    "video_end": 40.0,  # Metadata for video loading
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                for sample in samples:
+                    f.write(json.dumps(sample) + "\n")
+
+            yield annotation_path
+
+    def test_video_metadata_passed_through(self, annotations_with_video_metadata):
+        """Test that video_start and video_end metadata is preserved in dataset output."""
+        dataset = VideoTemporalDataset(
+            annotation_file=annotations_with_video_metadata,
+            use_temporal_tokens=True,
+        )
+
+        item = dataset[0]
+
+        # Duration and timestamp should be used as-is (already adjusted in annotation)
+        assert item["duration"] == 30.0
+        assert item["timestamp"] == [5.0, 10.0]
+
+        # video_start and video_end should be passed through as metadata for video loading
+        assert item["video_start"] == 10.0
+        assert item["video_end"] == 40.0
+
+        # Temporal tokens should be generated based on the duration and timestamp
+        assert "temporal_tokens" in item
+        assert len(item["temporal_tokens"]) == 2
 
 
 if __name__ == "__main__":

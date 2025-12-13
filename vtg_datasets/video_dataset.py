@@ -143,22 +143,17 @@ class VideoTemporalDataset(Dataset):
             video_path = Path(video_path)
 
         # Get temporal info
+        # Note: In the annotation file, duration is already the actual video segment duration
+        # (after applying video_start/video_end during annotation creation), and timestamp
+        # values are relative to the start of that segment (offset from video_start).
+        # video_start and video_end are only metadata for video loading, not for temporal calculation.
         duration = sample["duration"]
         timestamp = sample["timestamp"]
         start_time, end_time = timestamp[0], timestamp[1]
 
-        # Apply video trimming if specified
+        # Get video trimming metadata (used only for video loading, not for temporal calculation)
         video_start = sample.get("video_start")
         video_end = sample.get("video_end")
-
-        if video_start is not None:
-            start_time = max(0, start_time - video_start)
-            end_time = max(0, end_time - video_start)
-            duration = duration - video_start
-            if video_end is not None:
-                duration = min(duration, video_end - video_start)
-        elif video_end is not None:
-            duration = min(duration, video_end)
 
         # Normalize timestamps if needed
         if self.use_relative_timestamps and duration > 0:
