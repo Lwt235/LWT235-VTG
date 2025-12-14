@@ -2,7 +2,8 @@ from inference import VideoTemporalInference
 
 # Initialize
 engine = VideoTemporalInference(
-    model_path="./ckpts/Qwen3-VL-4B-Instruct",
+    # model_path="./ckpts/Qwen3-VL-4B-Instruct",
+    model_path="./outputs/sft/checkpoint-final",
 )
 
 # Predict
