@@ -262,6 +262,67 @@ training:
   logging_steps: 10
 ```
 
+### Example 5: Duration-Based Dynamic Batching
+
+The framework supports duration-based batch sampling to stabilize GPU memory usage when videos have varying lengths. This is especially useful for datasets with diverse video durations.
+
+```yaml
+# configs/data/video_config.yaml
+duration_batching:
+  enabled: true                        # Enable duration-based batching
+  target_batch_duration: 1200.0        # Target total duration (seconds) per batch
+  max_batch_size: null                 # Optional: Maximum videos per batch
+  min_batch_size: 1                    # Minimum videos per batch
+  drop_last: false                     # Whether to drop incomplete batches
+```
+
+**How it works:**
+1. Videos are sorted by duration to group similar-length videos together
+2. Batches are formed using greedy bin-packing until target duration is reached
+3. This ensures consistent GPU memory usage across batches
+4. In multi-GPU training, batches are automatically distributed across GPUs
+
+**Benefits:**
+- More stable GPU memory usage with varying video lengths
+- Better GPU utilization compared to fixed batch sizes
+- Automatic load balancing in distributed training
+
+**Multi-GPU Support:**
+
+Duration-based batching automatically supports distributed training:
+
+```bash
+# Single GPU training
+python train_sft.py --config configs/training/sft_config.yaml \
+                    --data_config configs/data/video_config.yaml
+
+# Multi-GPU training (automatically detected)
+torchrun --nproc_per_node=4 train_sft.py \
+    --config configs/training/sft_config.yaml \
+    --data_config configs/data/video_config.yaml
+
+# Or with DeepSpeed
+deepspeed --num_gpus=4 train_sft.py \
+    --config configs/training/sft_config.yaml \
+    --data_config configs/data/video_config.yaml \
+    --deepspeed configs/deepspeed/ds_zero2.json
+```
+
+**Batch Logging:**
+
+When duration batching is enabled, the framework automatically logs batch statistics:
+- Average, minimum, and maximum batch sizes per logging interval
+- Training configuration (batch size, accumulation steps, world size)
+- Duration batching parameters at training start
+
+Example log output:
+```
+DurationBasedBatchSampler initialized: samples=1000, target_duration=1200.0s, avg_sample_duration=45.2s, expected_batch_size=26.5
+Duration range: min=10.5s, max=180.3s
+Distributed training: 4 GPUs, rank 0
+Step 10: batch_size avg=24.3, min=20, max=28
+```
+
 ---
 
 ## Troubleshooting

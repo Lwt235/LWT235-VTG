@@ -16,6 +16,9 @@ This framework provides a complete pipeline for training video temporal localiza
 - 📊 Multiple reward functions: Temporal IoU, Segment Overlap, Step Consistency
 - 🚀 DeepSpeed integration for efficient multi-GPU training
 - 📦 Easy export to Hugging Face format
+- ⚡ Duration-based dynamic batching for stable GPU memory usage with varying video lengths
+- 📈 Comprehensive batch logging and training statistics
+- 🔄 Automatic distributed training support for multi-GPU setups
 
 ## Installation
 
