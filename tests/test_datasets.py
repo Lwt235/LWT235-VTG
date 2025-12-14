@@ -552,5 +552,287 @@ class TestPixelLimits:
         assert "total_pixels" not in video_content
 
 
+class TestDurationBasedBatchSampler:
+    """Tests for DurationBasedBatchSampler."""
+
+    def test_basic_batching(self):
+        """Test basic duration-based batching."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        # Create samples with varying durations
+        durations = [10.0, 20.0, 15.0, 25.0, 30.0]  # Total: 100s
+        target_duration = 40.0  # Should create ~2-3 batches
+
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,  # Disable shuffle for predictable test
+        )
+
+        batches = list(sampler)
+
+        # Verify all samples are included
+        all_indices = []
+        for batch in batches:
+            all_indices.extend(batch)
+        assert sorted(all_indices) == list(range(len(durations)))
+
+    def test_respects_min_batch_size(self):
+        """Test that min_batch_size constraint is respected."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        durations = [50.0, 60.0, 40.0]  # Each sample exceeds target
+        target_duration = 30.0
+        min_batch_size = 2
+
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            min_batch_size=min_batch_size,
+            shuffle=False,
+        )
+
+        batches = list(sampler)
+
+        # Each batch should have at least min_batch_size samples
+        # (except possibly the last batch if drop_last=False)
+        for batch in batches[:-1]:
+            assert len(batch) >= min_batch_size
+
+    def test_respects_max_batch_size(self):
+        """Test that max_batch_size constraint is respected."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        durations = [5.0] * 10  # Short videos
+        target_duration = 100.0  # Would include all without max constraint
+        max_batch_size = 3
+
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            max_batch_size=max_batch_size,
+            shuffle=False,
+        )
+
+        batches = list(sampler)
+
+        # Each batch should have at most max_batch_size samples
+        for batch in batches:
+            assert len(batch) <= max_batch_size
+
+    def test_shuffle_reproducibility(self):
+        """Test that shuffling is reproducible with seed."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        durations = [10.0, 20.0, 15.0, 25.0, 30.0]
+
+        sampler1 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=40.0,
+            shuffle=True,
+            seed=42,
+        )
+
+        sampler2 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=40.0,
+            shuffle=True,
+            seed=42,
+        )
+
+        batches1 = list(sampler1)
+        batches2 = list(sampler2)
+
+        assert batches1 == batches2
+
+    def test_set_epoch(self):
+        """Test that set_epoch changes shuffle order."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        durations = [10.0, 20.0, 15.0, 25.0, 30.0]
+
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=40.0,
+            shuffle=True,
+            seed=42,
+        )
+
+        sampler.set_epoch(0)
+        batches_epoch0 = list(sampler)
+
+        sampler.set_epoch(1)
+        batches_epoch1 = list(sampler)
+
+        # Batches should be different for different epochs
+        all_indices_0 = [idx for batch in batches_epoch0 for idx in batch]
+        all_indices_1 = [idx for batch in batches_epoch1 for idx in batch]
+        assert all_indices_0 != all_indices_1
+
+    def test_drop_last(self):
+        """Test drop_last behavior."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        durations = [30.0, 30.0, 10.0]  # Last sample alone
+        target_duration = 50.0
+        min_batch_size = 2
+
+        # With drop_last=True
+        sampler_drop = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            min_batch_size=min_batch_size,
+            drop_last=True,
+            shuffle=False,
+        )
+
+        # With drop_last=False
+        sampler_keep = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            min_batch_size=min_batch_size,
+            drop_last=False,
+            shuffle=False,
+        )
+
+        batches_drop = list(sampler_drop)
+        batches_keep = list(sampler_keep)
+
+        # drop_last should have fewer samples covered
+        indices_drop = [idx for batch in batches_drop for idx in batch]
+        indices_keep = [idx for batch in batches_keep for idx in batch]
+        assert len(indices_keep) >= len(indices_drop)
+
+    def test_validation_errors(self):
+        """Test that invalid configurations raise errors."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        # Empty durations
+        with pytest.raises(ValueError, match="empty"):
+            DurationBasedBatchSampler(
+                durations=[],
+                target_batch_duration=30.0,
+            )
+
+        # Non-positive target duration
+        with pytest.raises(ValueError, match="positive"):
+            DurationBasedBatchSampler(
+                durations=[10.0, 20.0],
+                target_batch_duration=0.0,
+            )
+
+        # Invalid min_batch_size
+        with pytest.raises(ValueError, match="min_batch_size"):
+            DurationBasedBatchSampler(
+                durations=[10.0, 20.0],
+                target_batch_duration=30.0,
+                min_batch_size=0,
+            )
+
+        # max_batch_size < min_batch_size
+        with pytest.raises(ValueError, match="max_batch_size"):
+            DurationBasedBatchSampler(
+                durations=[10.0, 20.0],
+                target_batch_duration=30.0,
+                min_batch_size=3,
+                max_batch_size=2,
+            )
+
+
+class TestCreateDurationBasedBatchSampler:
+    """Tests for create_duration_based_batch_sampler factory function."""
+
+    @pytest.fixture
+    def sample_annotations(self):
+        """Create sample annotation file with varying durations."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.jsonl"
+
+            samples = [
+                {
+                    "video": "./videos/test1.mp4",
+                    "duration": 30.0,
+                    "timestamp": [5.0, 10.0],
+                    "sentence": "A person opens the door",
+                },
+                {
+                    "video": "./videos/test2.mp4",
+                    "duration": 45.0,
+                    "timestamp": [20.0, 35.0],
+                    "sentence": "The cat jumps on the table",
+                },
+                {
+                    "video": "./videos/test3.mp4",
+                    "duration": 20.0,
+                    "timestamp": [5.0, 15.0],
+                    "sentence": "A dog barks",
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                for sample in samples:
+                    f.write(json.dumps(sample) + "\n")
+
+            yield annotation_path
+
+    def test_create_from_dataset(self, sample_annotations):
+        """Test creating batch sampler from dataset."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        dataset = VideoTemporalDataset(annotation_file=sample_annotations)
+
+        sampler = create_duration_based_batch_sampler(
+            dataset=dataset,
+            target_batch_duration=60.0,
+            shuffle=False,
+        )
+
+        batches = list(sampler)
+
+        # Verify all samples are included
+        all_indices = [idx for batch in batches for idx in batch]
+        assert sorted(all_indices) == list(range(len(dataset)))
+
+    def test_extracts_durations_correctly(self, sample_annotations):
+        """Test that durations are correctly extracted from dataset."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        dataset = VideoTemporalDataset(annotation_file=sample_annotations)
+
+        sampler = create_duration_based_batch_sampler(
+            dataset=dataset,
+            target_batch_duration=60.0,
+        )
+
+        # Check that durations match the dataset
+        assert sampler.durations == [30.0, 45.0, 20.0]
+
+    def test_invalid_dataset_no_samples_attribute(self):
+        """Test error when dataset doesn't have samples attribute."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        class InvalidDataset:
+            pass
+
+        with pytest.raises(AttributeError, match="samples"):
+            create_duration_based_batch_sampler(
+                dataset=InvalidDataset(),
+                target_batch_duration=60.0,
+            )
+
+    def test_invalid_dataset_samples_not_dicts(self):
+        """Test error when samples are not dictionaries."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        class InvalidDataset:
+            samples = ["not", "dicts"]
+
+        with pytest.raises(TypeError, match="dictionary"):
+            create_duration_based_batch_sampler(
+                dataset=InvalidDataset(),
+                target_batch_duration=60.0,
+            )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

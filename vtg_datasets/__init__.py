@@ -13,6 +13,10 @@ from .collate_fns import (
     create_sft_collator,
     create_rl_collator,
 )
+from .duration_sampler import (
+    DurationBasedBatchSampler,
+    create_duration_based_batch_sampler,
+)
 
 __all__ = [
     "VideoTemporalDataset",
@@ -22,4 +26,6 @@ __all__ = [
     "RLCollator",
     "create_sft_collator",
     "create_rl_collator",
+    "DurationBasedBatchSampler",
+    "create_duration_based_batch_sampler",
 ]
