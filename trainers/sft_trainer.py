@@ -387,7 +387,7 @@ def create_sft_trainer(
 
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_name,
-        dtype=torch_dtype,
+        torch_dtype=torch_dtype,
         trust_remote_code=model_config.get("trust_remote_code", True),
         attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )

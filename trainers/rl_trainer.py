@@ -4,6 +4,7 @@ Reinforcement Learning Trainer for Video Temporal Localization.
 Provides GRPO/R1 training with reward functions for temporal grounding.
 """
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -39,6 +40,23 @@ from utils.temporal_tokens import (
 from rewards import CompositeReward, create_composite_reward
 
 logger = get_logger(__name__)
+
+
+def _get_adapter_info(model_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    """
+    Check if a model path contains a LoRA adapter and return adapter info.
+
+    Args:
+        model_path: Path to model checkpoint.
+
+    Returns:
+        Adapter config dictionary if it's a LoRA adapter, None otherwise.
+    """
+    adapter_config_path = Path(model_path) / "adapter_config.json"
+    if adapter_config_path.exists():
+        with open(adapter_config_path, "r") as f:
+            return json.load(f)
+    return None
 
 
 class VideoTemporalRLTrainer:
@@ -548,78 +566,136 @@ def create_rl_trainer(
 
     logger.info(f"Loading model from {model_name}")
 
-    # Load processor and tokenizer
-    processor = AutoProcessor.from_pretrained(
-        model_name,
-        trust_remote_code=model_config.get("trust_remote_code", True),
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        trust_remote_code=model_config.get("trust_remote_code", True),
-    )
-
     # Check if temporal tokens should be used
     temporal_config = {}
     if data_config is not None:
         temporal_config = data_config.get("temporal", {})
     use_temporal_tokens = temporal_config.get("use_temporal_tokens", False)
 
-    # Add temporal tokens to tokenizer if enabled
-    if use_temporal_tokens:
-        logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
-        add_temporal_tokens_to_tokenizer(tokenizer)
+    # Check if this is a LoRA adapter checkpoint
+    adapter_config = _get_adapter_info(model_name)
+    is_lora_adapter = adapter_config is not None
 
-    # Load model
     torch_dtype = getattr(torch, model_config.get("torch_dtype", "bfloat16"))
+    attn_impl = model_config.get("attn_implementation", "flash_attention_2")
 
-    model = Qwen3VLForConditionalGeneration.from_pretrained(
-        model_name,
-        dtype=torch_dtype,
-        trust_remote_code=model_config.get("trust_remote_code", True),
-        attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
-    )
+    if is_lora_adapter:
+        # This is a LoRA adapter checkpoint
+        # We need to load the base model first, then add temporal tokens,
+        # then load the adapter separately
+        base_model_path = adapter_config.get("base_model_name_or_path")
+        if not base_model_path:
+            raise ValueError(
+                f"LoRA adapter at {model_name} does not specify base_model_name_or_path"
+            )
 
-    # Initialize temporal token embeddings if enabled
-    if use_temporal_tokens:
-        logger.info("Initializing temporal token embeddings")
-        init_strategy = temporal_config.get("embedding_init_strategy", "mean")
-        resize_model_embeddings_for_temporal_tokens(model, tokenizer, init_strategy)
+        logger.info(f"Detected LoRA adapter, loading base model from {base_model_path}")
 
-    # Apply LoRA if configured
-    lora_config = config.get("lora", {})
-    if lora_config.get("enabled", False) and not isinstance(model, PeftModel):
-        logger.info("Applying LoRA configuration")
-
-        # Get target modules from config and convert to list (OmegaConf -> Python)
-        target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
-        if hasattr(target_modules, "__iter__") and not isinstance(target_modules, (str, list)):
-            target_modules = list(target_modules)
-
-        # When using temporal tokens, use trainable_token_indices for efficient training
-        # This method only trains the specific new tokens without modifying the full embedding matrix.
-        # Reference: https://huggingface.co/docs/peft/main/en/package_reference/lora#peft.LoraConfig
-        # "Efficiently train tokens alongside LoRA"
-        trainable_token_indices = None
-        if use_temporal_tokens:
-            # Get the token IDs for temporal tokens
-            temporal_token_ids = get_temporal_token_ids(tokenizer)
-            # Use trainable_token_indices parameter to efficiently train new tokens
-            # This saves memory compared to adding embed_tokens to target_modules
-            trainable_token_indices = {"embed_tokens": temporal_token_ids}
-            logger.info(f"Temporal tokens enabled: trainable_token_indices with {len(temporal_token_ids)} tokens")
-
-        peft_config = LoraConfig(
-            r=lora_config.get("r", 64),
-            lora_alpha=lora_config.get("lora_alpha", 128),
-            lora_dropout=lora_config.get("lora_dropout", 0.05),
-            target_modules=target_modules,
-            bias=lora_config.get("bias", "none"),
-            task_type=TaskType.CAUSAL_LM,
-            trainable_token_indices=trainable_token_indices,
+        # Load processor and tokenizer from the adapter checkpoint
+        processor = AutoProcessor.from_pretrained(
+            model_name,
+            trust_remote_code=model_config.get("trust_remote_code", True),
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=model_config.get("trust_remote_code", True),
         )
 
-        model = get_peft_model(model, peft_config)
+        # Add temporal tokens to tokenizer if enabled
+        if use_temporal_tokens:
+            logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+            add_temporal_tokens_to_tokenizer(tokenizer)
+
+        # Load base model
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            base_model_path,
+            torch_dtype=torch_dtype,
+            trust_remote_code=model_config.get("trust_remote_code", True),
+            attn_implementation=attn_impl,
+        )
+
+        # Initialize temporal token embeddings if enabled
+        # This MUST happen before loading the LoRA adapter
+        if use_temporal_tokens:
+            logger.info("Initializing temporal token embeddings")
+            init_strategy = temporal_config.get("embedding_init_strategy", "sinusoidal")
+            resize_model_embeddings_for_temporal_tokens(model, tokenizer, init_strategy)
+
+        # Now load the LoRA adapter
+        logger.info(f"Loading LoRA adapter from {model_name}")
+        model = PeftModel.from_pretrained(
+            model,
+            model_name,
+            is_trainable=True,  # Enable training for RL
+        )
         model.print_trainable_parameters()
+
+    else:
+        # Not a LoRA adapter, load directly
+        # Load processor and tokenizer
+        processor = AutoProcessor.from_pretrained(
+            model_name,
+            trust_remote_code=model_config.get("trust_remote_code", True),
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=model_config.get("trust_remote_code", True),
+        )
+
+        # Add temporal tokens to tokenizer if enabled
+        if use_temporal_tokens:
+            logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+            add_temporal_tokens_to_tokenizer(tokenizer)
+
+        # Load model
+        model = Qwen3VLForConditionalGeneration.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            trust_remote_code=model_config.get("trust_remote_code", True),
+            attn_implementation=attn_impl,
+        )
+
+        # Initialize temporal token embeddings if enabled
+        if use_temporal_tokens:
+            logger.info("Initializing temporal token embeddings")
+            init_strategy = temporal_config.get("embedding_init_strategy", "sinusoidal")
+            resize_model_embeddings_for_temporal_tokens(model, tokenizer, init_strategy)
+
+        # Apply LoRA if configured
+        lora_config = config.get("lora", {})
+        if lora_config.get("enabled", False) and not isinstance(model, PeftModel):
+            logger.info("Applying LoRA configuration")
+
+            # Get target modules from config and convert to list (OmegaConf -> Python)
+            target_modules = lora_config.get("target_modules", ["q_proj", "v_proj"])
+            if hasattr(target_modules, "__iter__") and not isinstance(target_modules, (str, list)):
+                target_modules = list(target_modules)
+
+            # When using temporal tokens, use trainable_token_indices for efficient training
+            # This method only trains the specific new tokens without modifying the full embedding matrix.
+            # Reference: https://huggingface.co/docs/peft/main/en/package_reference/lora#peft.LoraConfig
+            # "Efficiently train tokens alongside LoRA"
+            trainable_token_indices = None
+            if use_temporal_tokens:
+                # Get the token IDs for temporal tokens
+                temporal_token_ids = get_temporal_token_ids(tokenizer)
+                # Use trainable_token_indices parameter to efficiently train new tokens
+                # This saves memory compared to adding embed_tokens to target_modules
+                trainable_token_indices = {"embed_tokens": temporal_token_ids}
+                logger.info(f"Temporal tokens enabled: trainable_token_indices with {len(temporal_token_ids)} tokens")
+
+            peft_config = LoraConfig(
+                r=lora_config.get("r", 64),
+                lora_alpha=lora_config.get("lora_alpha", 128),
+                lora_dropout=lora_config.get("lora_dropout", 0.05),
+                target_modules=target_modules,
+                bias=lora_config.get("bias", "none"),
+                task_type=TaskType.CAUSAL_LM,
+                trainable_token_indices=trainable_token_indices,
+            )
+
+            model = get_peft_model(model, peft_config)
+            model.print_trainable_parameters()
 
     # Load reference model if needed
     ref_model_config = config.get("ref_model", {})
@@ -628,7 +704,7 @@ def create_rl_trainer(
     if ref_model_config.get("name_or_path"):
         ref_model = Qwen3VLForConditionalGeneration.from_pretrained(
             ref_model_config["name_or_path"],
-            dtype=torch_dtype,
+            torch_dtype=torch_dtype,
             trust_remote_code=True,
         )
         ref_model.eval()
