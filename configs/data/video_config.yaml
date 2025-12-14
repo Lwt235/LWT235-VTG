@@ -38,7 +38,7 @@ video:
   #   height: 384
   #   width: 384
   # Frame rate for processing (0 = use original)
-  fps: 1
+  fps: 2
   # # Video normalization
   # normalize:
   #   mean: [0.485, 0.456, 0.406]
@@ -53,11 +53,11 @@ video:
   #
   # Minimum pixels per frame (default: 4 * 32 * 32 = 4096)
   min_pixels: 4096
-  # Maximum pixels per frame (default: 16 * 32 * 32 = 16384)
-  max_pixels: 16384
-  # Total pixels across all frames (default: 1280 * 32 * 32 = 1310720)
+  # Maximum pixels per frame (default: 8 * 32 * 32 = 8192)
+  max_pixels: 8192
+  # Total pixels across all frames (default: 20480 * 32 * 32 = 20971520)
   # Set to null to disable total pixel limit
-  total_pixels: 1310720
+  total_pixels: 20971520
 
 # # Text processing settings
 # text:
@@ -74,12 +74,12 @@ temporal:
   use_relative_timestamps: true
   # Whether to use temporal tokens (<0>~<999>) instead of float values
   # When enabled, adds new tokens to vocabulary (not replacing existing tokens)
-  use_temporal_tokens: false
-  # # Embedding initialization strategy for temporal tokens:
-  # # - "sinusoidal": Use sinusoidal positional encoding (recommended for faster convergence)
-  # # - "mean": Use mean of existing embeddings
-  # # - "random": Random initialization
-  # embedding_init_strategy: "sinusoidal"
+  use_temporal_tokens: true
+  # Embedding initialization strategy for temporal tokens:
+  # - "sinusoidal": Use sinusoidal positional encoding (recommended for faster convergence)
+  # - "mean": Use mean of existing embeddings
+  # - "random": Random initialization
+  embedding_init_strategy: "sinusoidal"
 
   # # Output format: "tokens" for text generation, "class" for classification
   # output_format: "tokens"
