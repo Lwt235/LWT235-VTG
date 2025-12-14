@@ -42,6 +42,9 @@ class VideoTemporalDataset(Dataset):
         num_bins: int = 100,
         use_temporal_tokens: bool = False,
         transform: Optional[Callable] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        total_pixels: Optional[int] = None,
     ):
         """
         Initialize the dataset.
@@ -56,6 +59,9 @@ class VideoTemporalDataset(Dataset):
             num_bins: Number of temporal bins for discretization.
             use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             transform: Optional transform to apply to samples.
+            min_pixels: Minimum pixels per video frame (for GPU memory control).
+            max_pixels: Maximum pixels per video frame (for GPU memory control).
+            total_pixels: Total pixels across all video frames (for GPU memory control).
         """
         self.annotation_file = Path(annotation_file)
         self.video_dir = Path(video_dir) if video_dir else None
@@ -66,6 +72,9 @@ class VideoTemporalDataset(Dataset):
         self.num_bins = num_bins
         self.use_temporal_tokens = use_temporal_tokens
         self.transform = transform
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
+        self.total_pixels = total_pixels
 
         # Load annotations
         self.samples = self._load_annotations()
@@ -240,6 +249,14 @@ class VideoTemporalDataset(Dataset):
         if video_end is not None:
             video_content["video_end"] = video_end
 
+        # Add pixel limit settings for GPU memory control
+        if self.min_pixels is not None:
+            video_content["min_pixels"] = self.min_pixels
+        if self.max_pixels is not None:
+            video_content["max_pixels"] = self.max_pixels
+        if self.total_pixels is not None:
+            video_content["total_pixels"] = self.total_pixels
+
         messages = [
             {
                 "role": "user",
@@ -287,6 +304,9 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         prompt_template: Optional[str] = None,
         response_template: Optional[str] = None,
         transform: Optional[Callable] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        total_pixels: Optional[int] = None,
     ):
         """
         Initialize the SFT dataset.
@@ -303,6 +323,9 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             prompt_template: Custom prompt template with {query} placeholder.
             response_template: Custom response template with {start} and {end} placeholders.
             transform: Optional transform to apply to samples.
+            min_pixels: Minimum pixels per video frame (for GPU memory control).
+            max_pixels: Maximum pixels per video frame (for GPU memory control).
+            total_pixels: Total pixels across all video frames (for GPU memory control).
         """
         super().__init__(
             annotation_file=annotation_file,
@@ -314,6 +337,9 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             num_bins=num_bins,
             use_temporal_tokens=use_temporal_tokens,
             transform=transform,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
         )
 
         # Set prompt and response templates based on temporal tokens mode
@@ -368,6 +394,14 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         if sample.get("video_end") is not None:
             video_content["video_end"] = sample["video_end"]
 
+        # Add pixel limit settings for GPU memory control
+        if self.min_pixels is not None:
+            video_content["min_pixels"] = self.min_pixels
+        if self.max_pixels is not None:
+            video_content["max_pixels"] = self.max_pixels
+        if self.total_pixels is not None:
+            video_content["total_pixels"] = self.total_pixels
+
         messages = [
             {
                 "role": "user",
@@ -414,6 +448,9 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         use_temporal_tokens: bool = False,
         prompt_template: Optional[str] = None,
         transform: Optional[Callable] = None,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        total_pixels: Optional[int] = None,
     ):
         """
         Initialize the RL dataset.
@@ -429,6 +466,9 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             prompt_template: Custom prompt template with {query} placeholder.
             transform: Optional transform to apply to samples.
+            min_pixels: Minimum pixels per video frame (for GPU memory control).
+            max_pixels: Maximum pixels per video frame (for GPU memory control).
+            total_pixels: Total pixels across all video frames (for GPU memory control).
         """
         super().__init__(
             annotation_file=annotation_file,
@@ -440,6 +480,9 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             num_bins=num_bins,
             use_temporal_tokens=use_temporal_tokens,
             transform=transform,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
         )
 
         # Set prompt template based on temporal tokens mode
@@ -489,6 +532,14 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             video_content["video_start"] = sample["video_start"]
         if sample.get("video_end") is not None:
             video_content["video_end"] = sample["video_end"]
+
+        # Add pixel limit settings for GPU memory control
+        if self.min_pixels is not None:
+            video_content["min_pixels"] = self.min_pixels
+        if self.max_pixels is not None:
+            video_content["max_pixels"] = self.max_pixels
+        if self.total_pixels is not None:
+            video_content["total_pixels"] = self.total_pixels
 
         messages = [
             {
