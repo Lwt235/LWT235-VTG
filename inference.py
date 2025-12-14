@@ -4,6 +4,7 @@ from inference import VideoTemporalInference
 engine = VideoTemporalInference(
     # model_path="./ckpts/Qwen3-VL-4B-Instruct",
     model_path="./outputs/sft/checkpoint-final",
+    use_temporal_tokens=True
 )
 
 # Predict
