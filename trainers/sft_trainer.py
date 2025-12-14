@@ -116,7 +116,8 @@ class VideoTemporalSFTTrainer(Trainer):
             from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
             
             # Get current epoch for reproducible shuffling
-            current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state else 0
+            # Note: self.state.epoch can be None at the start of training
+            current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state and self.state.epoch is not None else 0
             
             # Create duration-based batch sampler
             batch_sampler = create_duration_based_batch_sampler(
