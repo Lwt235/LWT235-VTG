@@ -12,7 +12,17 @@ Usage:
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress TRL's "Attempting to get learning rate from scheduler before it has started" warning
+# This warning occurs when logging tries to read LR before the first optimizer step
+# and is not actionable - it's an artifact of the TRL library's internal logging behavior
+warnings.filterwarnings(
+    "ignore",
+    message="Attempting to get learning rate from scheduler before it has started",
+    module="trl"
+)
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))

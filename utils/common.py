@@ -309,3 +309,24 @@ def denormalize_timestamp(
         Tuple of (start_seconds, end_seconds).
     """
     return norm_start * duration, norm_end * duration
+
+
+def get_adapter_info(model_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+    """
+    Check if a model path contains a LoRA adapter and return adapter info.
+
+    This function checks for the presence of `adapter_config.json` in the
+    model directory, which indicates a PEFT/LoRA adapter checkpoint.
+
+    Args:
+        model_path: Path to model checkpoint directory.
+
+    Returns:
+        Adapter config dictionary if it's a LoRA adapter, None otherwise.
+    """
+    import json
+    adapter_config_path = Path(model_path) / "adapter_config.json"
+    if adapter_config_path.exists():
+        with open(adapter_config_path, "r") as f:
+            return json.load(f)
+    return None

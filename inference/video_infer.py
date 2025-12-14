@@ -20,7 +20,7 @@ from transformers import (
 from peft import PeftModel
 
 from utils.logging_utils import get_logger
-from utils.common import load_config, seconds_to_timestamp
+from utils.common import load_config, seconds_to_timestamp, get_adapter_info
 from utils.temporal_tokens import (
     parse_temporal_response,
     add_temporal_tokens_to_tokenizer,
@@ -107,38 +107,99 @@ class VideoTemporalInference:
 
         logger.info(f"Loading model from {model_path_str}")
 
-        # Load processor and tokenizer
-        self.processor = AutoProcessor.from_pretrained(
-            model_path_str,
-            trust_remote_code=True,
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path_str,
-            trust_remote_code=True,
-        )
+        # Check if this is a LoRA adapter checkpoint
+        adapter_config = get_adapter_info(self.model_path)
+        is_lora_adapter = adapter_config is not None
 
-        # Add temporal tokens if enabled
-        if self.use_temporal_tokens:
-            logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
-            add_temporal_tokens_to_tokenizer(self.tokenizer)
+        if is_lora_adapter:
+            # This is a LoRA adapter checkpoint
+            # We need to load the base model first, then add temporal tokens,
+            # then load the adapter separately
+            base_model_path = adapter_config.get("base_model_name_or_path")
+            if not base_model_path:
+                raise ValueError(
+                    f"LoRA adapter at {model_path_str} does not specify base_model_name_or_path"
+                )
 
-        # Load model
-        attn_impl = "flash_attention_2" if use_flash_attention else "eager"
+            logger.info(f"Detected LoRA adapter, loading base model from {base_model_path}")
 
-        self.model = Qwen3VLForConditionalGeneration.from_pretrained(
-            model_path_str,
-            dtype=self.torch_dtype,
-            trust_remote_code=True,
-            attn_implementation=attn_impl,
-            device_map=self.device,
-        )
-
-        # Initialize temporal token embeddings if enabled
-        if self.use_temporal_tokens:
-            logger.info("Initializing temporal token embeddings with sinusoidal encoding")
-            resize_model_embeddings_for_temporal_tokens(
-                self.model, self.tokenizer, "sinusoidal"
+            # Load processor and tokenizer from the adapter checkpoint
+            # (which should have the tokenizer with temporal tokens if used during training)
+            self.processor = AutoProcessor.from_pretrained(
+                model_path_str,
+                trust_remote_code=True,
             )
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path_str,
+                trust_remote_code=True,
+            )
+
+            # Add temporal tokens if enabled
+            if self.use_temporal_tokens:
+                logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+                add_temporal_tokens_to_tokenizer(self.tokenizer)
+
+            # Load base model
+            attn_impl = "flash_attention_2" if use_flash_attention else "eager"
+
+            self.model = Qwen3VLForConditionalGeneration.from_pretrained(
+                base_model_path,
+                torch_dtype=self.torch_dtype,
+                trust_remote_code=True,
+                attn_implementation=attn_impl,
+                device_map=self.device,
+            )
+
+            # Initialize temporal token embeddings if enabled
+            # This MUST happen before loading the LoRA adapter
+            if self.use_temporal_tokens:
+                logger.info("Initializing temporal token embeddings with sinusoidal encoding")
+                resize_model_embeddings_for_temporal_tokens(
+                    self.model, self.tokenizer, "sinusoidal"
+                )
+
+            # Now load the LoRA adapter
+            logger.info(f"Loading LoRA adapter from {model_path_str}")
+            self.model = PeftModel.from_pretrained(
+                self.model,
+                model_path_str,
+                is_trainable=False,
+            )
+
+        else:
+            # Not a LoRA adapter, load directly
+            # Load processor and tokenizer
+            self.processor = AutoProcessor.from_pretrained(
+                model_path_str,
+                trust_remote_code=True,
+            )
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path_str,
+                trust_remote_code=True,
+            )
+
+            # Add temporal tokens if enabled
+            if self.use_temporal_tokens:
+                logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
+                add_temporal_tokens_to_tokenizer(self.tokenizer)
+
+            # Load model
+            attn_impl = "flash_attention_2" if use_flash_attention else "eager"
+
+            self.model = Qwen3VLForConditionalGeneration.from_pretrained(
+                model_path_str,
+                torch_dtype=self.torch_dtype,
+                trust_remote_code=True,
+                attn_implementation=attn_impl,
+                device_map=self.device,
+            )
+
+            # Initialize temporal token embeddings if enabled
+            if self.use_temporal_tokens:
+                logger.info("Initializing temporal token embeddings with sinusoidal encoding")
+                resize_model_embeddings_for_temporal_tokens(
+                    self.model, self.tokenizer, "sinusoidal"
+                )
 
         self.model.eval()
 
