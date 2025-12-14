@@ -55,7 +55,7 @@ training:
   gradient_accumulation_steps: 4
 
   # Training epochs/steps
-  num_train_epochs: 3
+  num_train_epochs: 1
   max_steps: -1  # -1 means use num_train_epochs
 
   # Learning rates (different parts of model)

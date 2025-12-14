@@ -107,7 +107,7 @@ duration_batching:
   enabled: true
   # Target total duration (in seconds) for each batch
   # Example: If target_batch_duration=60 and avg video is 30s, expect ~2 videos/batch
-  target_batch_duration: 1200.0
+  target_batch_duration: 800.0
   # Maximum number of samples per batch (optional constraint)
   # Set to null to disable this constraint
   max_batch_size: null
