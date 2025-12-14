@@ -454,6 +454,9 @@ def create_sft_trainer(
             use_relative_timestamps=temporal_cfg.get("use_relative_timestamps", True),
             num_bins=temporal_cfg.get("num_bins", 100),
             use_temporal_tokens=use_temporal_tokens,
+            min_pixels=video_config.get("min_pixels"),
+            max_pixels=video_config.get("max_pixels"),
+            total_pixels=video_config.get("total_pixels"),
         )
 
     if eval_dataset is None and data_config is not None:
@@ -462,15 +465,19 @@ def create_sft_trainer(
             from vtg_datasets.video_dataset import VideoTemporalSFTDataset
 
             temporal_cfg = data_config.get("temporal", {})
+            video_config = data_config.get("video", {})
             eval_dataset = VideoTemporalSFTDataset(
                 annotation_file=validation_config.get("annotation_file"),
                 video_dir=data_config.get("dataset", {}).get("video_dir"),
                 processor=processor,
                 tokenizer=tokenizer,
-                max_frames=data_config.get("video", {}).get("max_frames", 32),
+                max_frames=video_config.get("max_frames", 32),
                 use_relative_timestamps=temporal_cfg.get("use_relative_timestamps", True),
                 num_bins=temporal_cfg.get("num_bins", 100),
                 use_temporal_tokens=use_temporal_tokens,
+                min_pixels=video_config.get("min_pixels"),
+                max_pixels=video_config.get("max_pixels"),
+                total_pixels=video_config.get("total_pixels"),
             )
 
     # Create data collator
