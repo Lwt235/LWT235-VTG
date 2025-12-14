@@ -139,7 +139,8 @@ class VideoTemporalSFTTrainer(Trainer):
             )
             batch_sampler.set_epoch(current_epoch)
 
-            if self.args.local_rank in [-1, 0]:
+            # Log only on main process (rank 0 or not distributed)
+            if rank in [None, 0]:
                 logger.info("Using duration-based batch sampling for training")
                 if num_replicas and num_replicas > 1:
                     logger.info(f"Distributed training: {num_replicas} GPUs, rank {rank}")
