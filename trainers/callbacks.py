@@ -68,12 +68,6 @@ class BatchLoggingCallback(TrainerCallback):
             
             if batch_size is not None:
                 self.batch_sizes.append(batch_size)
-                
-                # Try to get batch duration if available
-                if "sample_indices" in inputs:
-                    # This is a custom field we can add to track which samples are in the batch
-                    # The actual duration would need to be computed from dataset metadata
-                    pass
         
         return control
     

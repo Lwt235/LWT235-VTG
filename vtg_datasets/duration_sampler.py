@@ -212,8 +212,12 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
             perm = torch.randperm(len(batches), generator=g).tolist()
             batches = [batches[i] for i in perm]
         
-        # In distributed training, partition batches across GPUs
+        # In distributed training, partition batches across GPUs using round-robin distribution
         # Each GPU gets every num_replicas-th batch starting from its rank
+        # Example with 2 GPUs and 10 batches:
+        #   GPU 0 (rank=0): batches [0, 2, 4, 6, 8]
+        #   GPU 1 (rank=1): batches [1, 3, 5, 7, 9]
+        # This ensures load balancing and no data overlap between GPUs
         if self.num_replicas > 1:
             batches = [batches[i] for i in range(self.rank, len(batches), self.num_replicas)]
         

@@ -118,8 +118,9 @@ class VideoTemporalSFTTrainer(Trainer):
             # Get current epoch for reproducible shuffling
             current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state and self.state.epoch is not None else 0
 
-            # For distributed training, let the sampler handle data partitioning
-            # The sampler will automatically detect world_size and rank
+            # For distributed training, pass distributed parameters to the sampler
+            # These will be auto-detected if not provided, but we pass them explicitly
+            # to ensure consistency with TrainingArguments
             num_replicas = self.args.world_size if self.args.world_size > 1 else None
             rank = self.args.process_index if self.args.world_size > 1 else None
 
