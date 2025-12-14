@@ -209,7 +209,7 @@ class VideoTemporalSFTTrainer(Trainer):
         inputs = dict(inputs)
 
         # Extract labels if present
-        labels = inputs.pop("labels", None)
+        # labels = inputs.pop("labels", None)
 
         # Remove metadata that shouldn't go to model
         inputs.pop("temporal_bins", None)
@@ -218,23 +218,23 @@ class VideoTemporalSFTTrainer(Trainer):
         # Forward pass
         outputs = model(**inputs)
 
-        if labels is not None:
-            # Compute loss with labels
-            logits = outputs.logits
+        # if labels is not None:
+        #     # Compute loss with labels
+        #     logits = outputs.logits
 
-            # Shift for causal LM
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+        #     # Shift for causal LM
+        #     shift_logits = logits[..., :-1, :].contiguous()
+        #     shift_labels = labels[..., 1:].contiguous()
 
-            # Flatten
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
-            )
-        else:
-            # Use model's computed loss
-            loss = outputs.loss
+        #     # Flatten
+        #     loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+        #     loss = loss_fct(
+        #         shift_logits.view(-1, shift_logits.size(-1)),
+        #         shift_labels.view(-1),
+        #     )
+        # else:
+        #     # Use model's computed loss
+        loss = outputs.loss
 
         if return_outputs:
             return loss, outputs
@@ -339,7 +339,7 @@ def create_sft_trainer(
     configs_to_sync = [model.config]
     if hasattr(model, "generation_config"):
         configs_to_sync.append(model.generation_config)
-    
+
     for cfg in configs_to_sync:
         if tokenizer.pad_token_id is not None:
             cfg.pad_token_id = tokenizer.pad_token_id
