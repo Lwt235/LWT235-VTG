@@ -110,6 +110,7 @@ class VideoTemporalInference:
         # Check if this is a LoRA adapter checkpoint
         adapter_config = get_adapter_info(self.model_path)
         is_lora_adapter = adapter_config is not None
+        base_model_path = None
 
         if is_lora_adapter:
             # This is a LoRA adapter checkpoint
@@ -204,8 +205,10 @@ class VideoTemporalInference:
         self.model.eval()
 
         # Default generation config
+        # Load from base model if using LoRA adapter, otherwise from model_path
+        config_path = base_model_path if is_lora_adapter and base_model_path else model_path_str
         self.generation_config = GenerationConfig.from_pretrained(
-            model_path_str
+            config_path
         )
 
     def predict(
