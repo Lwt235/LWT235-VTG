@@ -807,6 +807,32 @@ class TestCreateDurationBasedBatchSampler:
         # Check that durations match the dataset
         assert sampler.durations == [30.0, 45.0, 20.0]
 
+    def test_invalid_dataset_no_samples_attribute(self):
+        """Test error when dataset doesn't have samples attribute."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        class InvalidDataset:
+            pass
+
+        with pytest.raises(AttributeError, match="samples"):
+            create_duration_based_batch_sampler(
+                dataset=InvalidDataset(),
+                target_batch_duration=60.0,
+            )
+
+    def test_invalid_dataset_samples_not_dicts(self):
+        """Test error when samples are not dictionaries."""
+        from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+
+        class InvalidDataset:
+            samples = ["not", "dicts"]
+
+        with pytest.raises(TypeError, match="dictionary"):
+            create_duration_based_batch_sampler(
+                dataset=InvalidDataset(),
+                target_batch_duration=60.0,
+            )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -180,7 +180,9 @@ def create_duration_based_batch_sampler(
     Create a duration-based batch sampler from a dataset.
     
     Args:
-        dataset: A VideoTemporalDataset (or subclass) with loaded samples.
+        dataset: A VideoTemporalDataset (or subclass) with a `samples` attribute
+            containing a list of dictionaries. Each dictionary should have a
+            'duration' key with the video duration in seconds.
         target_batch_duration: Target total duration per batch in seconds.
         max_batch_size: Maximum number of samples per batch.
         min_batch_size: Minimum number of samples per batch.
@@ -190,13 +192,28 @@ def create_duration_based_batch_sampler(
     
     Returns:
         Configured DurationBasedBatchSampler instance.
+    
+    Raises:
+        AttributeError: If dataset doesn't have a `samples` attribute.
+        TypeError: If samples are not a list of dictionaries.
     """
+    # Validate dataset interface
+    if not hasattr(dataset, "samples"):
+        raise AttributeError(
+            "Dataset must have a 'samples' attribute containing sample dictionaries. "
+            "Expected VideoTemporalDataset or compatible dataset."
+        )
+    
     # Extract durations from dataset
     durations = []
-    for sample in dataset.samples:
+    for idx, sample in enumerate(dataset.samples):
+        if not isinstance(sample, dict):
+            raise TypeError(
+                f"Sample at index {idx} must be a dictionary, got {type(sample).__name__}"
+            )
         duration = sample.get("duration", 0.0)
         if duration <= 0:
-            logger.warning(f"Sample has invalid duration: {duration}, using 1.0")
+            logger.warning(f"Sample at index {idx} has invalid duration: {duration}, using 1.0")
             duration = 1.0
         durations.append(duration)
     

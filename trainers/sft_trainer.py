@@ -115,6 +115,9 @@ class VideoTemporalSFTTrainer(Trainer):
         if self.duration_batching_config and self.duration_batching_config.get("enabled", False):
             from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
             
+            # Get current epoch for reproducible shuffling
+            current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state else 0
+            
             # Create duration-based batch sampler
             batch_sampler = create_duration_based_batch_sampler(
                 dataset=self.train_dataset,
@@ -125,10 +128,7 @@ class VideoTemporalSFTTrainer(Trainer):
                 drop_last=self.duration_batching_config.get("drop_last", False),
                 seed=self.args.data_seed,
             )
-            
-            # Set epoch for reproducible shuffling
-            if hasattr(batch_sampler, "set_epoch"):
-                batch_sampler.set_epoch(int(self.state.epoch) if hasattr(self, "state") and self.state else 0)
+            batch_sampler.set_epoch(current_epoch)
             
             logger.info("Using duration-based batch sampling for training")
             
