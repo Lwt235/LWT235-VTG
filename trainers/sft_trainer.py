@@ -118,6 +118,11 @@ class VideoTemporalSFTTrainer(Trainer):
             # Get current epoch for reproducible shuffling
             current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state and self.state.epoch is not None else 0
 
+            # For distributed training, let the sampler handle data partitioning
+            # The sampler will automatically detect world_size and rank
+            num_replicas = self.args.world_size if self.args.world_size > 1 else None
+            rank = self.args.process_index if self.args.world_size > 1 else None
+
             # Create duration-based batch sampler
             batch_sampler = create_duration_based_batch_sampler(
                 dataset=self.train_dataset,
@@ -127,10 +132,15 @@ class VideoTemporalSFTTrainer(Trainer):
                 shuffle=True,  # Always shuffle training data
                 drop_last=self.duration_batching_config.get("drop_last", False),
                 seed=self.args.data_seed,
+                num_replicas=num_replicas,
+                rank=rank,
             )
             batch_sampler.set_epoch(current_epoch)
 
-            logger.info("Using duration-based batch sampling for training")
+            if self.args.local_rank in [-1, 0]:
+                logger.info("Using duration-based batch sampling for training")
+                if num_replicas and num_replicas > 1:
+                    logger.info(f"Distributed training: {num_replicas} GPUs, rank {rank}")
 
             return DataLoader(
                 self.train_dataset,
@@ -545,6 +555,17 @@ def create_sft_trainer(
             else:
                 duration_batching_config = dict(db_config)
 
+    # Setup callbacks
+    from trainers.callbacks import BatchLoggingCallback
+    
+    all_callbacks = []
+    if callbacks:
+        all_callbacks.extend(callbacks)
+    
+    # Add batch logging callback if duration batching is enabled
+    if duration_batching_config:
+        all_callbacks.append(BatchLoggingCallback(log_batch_stats=True))
+
     # Create trainer
     trainer = VideoTemporalSFTTrainer(
         model=model,
@@ -554,7 +575,7 @@ def create_sft_trainer(
         tokenizer=tokenizer,
         data_collator=data_collator,
         processor=processor,
-        callbacks=callbacks,
+        callbacks=all_callbacks if all_callbacks else None,
         mm_projector_lr=training_config.get("mm_projector_lr"),
         vision_tower_lr=training_config.get("vision_tower_lr"),
         head_lr=training_config.get("head_lr"),
