@@ -59,6 +59,9 @@ class VideoTemporalInference:
         prompt_template: Optional[str] = None,
         use_flash_attention: bool = True,
         use_temporal_tokens: bool = False,
+        min_pixels: Optional[int] = None,
+        max_pixels: Optional[int] = None,
+        total_pixels: Optional[int] = None,
     ):
         """
         Initialize the inference engine.
@@ -70,10 +73,16 @@ class VideoTemporalInference:
             prompt_template: Custom prompt template with {query} placeholder.
             use_flash_attention: Whether to use flash attention.
             use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
+            min_pixels: Minimum pixels per video frame (for GPU memory control).
+            max_pixels: Maximum pixels per video frame (for GPU memory control).
+            total_pixels: Total pixels across all video frames (for GPU memory control).
         """
         self.model_path = Path(model_path)
         self.torch_dtype = getattr(torch, torch_dtype)
         self.use_temporal_tokens = use_temporal_tokens
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
+        self.total_pixels = total_pixels
 
         # Set prompt template based on mode
         if use_temporal_tokens:
@@ -176,6 +185,14 @@ class VideoTemporalInference:
             video_content["video_start"] = video_start
         if video_end is not None:
             video_content["video_end"] = video_end
+
+        # Add pixel limit settings for GPU memory control
+        if self.min_pixels is not None:
+            video_content["min_pixels"] = self.min_pixels
+        if self.max_pixels is not None:
+            video_content["max_pixels"] = self.max_pixels
+        if self.total_pixels is not None:
+            video_content["total_pixels"] = self.total_pixels
 
         messages = [
             {

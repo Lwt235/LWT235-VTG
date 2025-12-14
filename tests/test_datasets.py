@@ -407,5 +407,150 @@ class TestVideoMetadata:
         assert len(item["temporal_tokens"]) == 2
 
 
+class TestPixelLimits:
+    """Tests for video frame resolution limit parameters (min_pixels, max_pixels, total_pixels)."""
+
+    @pytest.fixture
+    def sample_annotations(self):
+        """Create sample annotation file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            annotation_path = Path(tmpdir) / "train.jsonl"
+
+            samples = [
+                {
+                    "video": "./videos/test1.mp4",
+                    "duration": 30.0,
+                    "timestamp": [5.0, 10.0],
+                    "sentence": "A person opens the door",
+                },
+            ]
+
+            with open(annotation_path, "w") as f:
+                for sample in samples:
+                    f.write(json.dumps(sample) + "\n")
+
+            yield annotation_path
+
+    def test_base_dataset_with_pixel_limits(self, sample_annotations):
+        """Test VideoTemporalDataset correctly stores pixel limit parameters."""
+        min_pixels = 4 * 32 * 32  # 4096
+        max_pixels = 256 * 32 * 32  # 262144
+        total_pixels = 20480 * 32 * 32  # 20971520
+
+        dataset = VideoTemporalDataset(
+            annotation_file=sample_annotations,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
+        )
+
+        assert dataset.min_pixels == min_pixels
+        assert dataset.max_pixels == max_pixels
+        assert dataset.total_pixels == total_pixels
+
+    def test_base_dataset_get_video_messages_with_pixel_limits(self, sample_annotations):
+        """Test get_video_messages includes pixel limit settings."""
+        min_pixels = 4096
+        max_pixels = 262144
+        total_pixels = 20971520
+
+        dataset = VideoTemporalDataset(
+            annotation_file=sample_annotations,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
+        )
+
+        messages = dataset.get_video_messages(
+            video_path="./videos/test.mp4",
+            query="Test query",
+        )
+
+        video_content = messages[0]["content"][0]
+        assert video_content["type"] == "video"
+        assert video_content["min_pixels"] == min_pixels
+        assert video_content["max_pixels"] == max_pixels
+        assert video_content["total_pixels"] == total_pixels
+
+    def test_base_dataset_no_pixel_limits(self, sample_annotations):
+        """Test that pixel limits are not included when not specified."""
+        dataset = VideoTemporalDataset(
+            annotation_file=sample_annotations,
+        )
+
+        messages = dataset.get_video_messages(
+            video_path="./videos/test.mp4",
+            query="Test query",
+        )
+
+        video_content = messages[0]["content"][0]
+        assert video_content["type"] == "video"
+        assert "min_pixels" not in video_content
+        assert "max_pixels" not in video_content
+        assert "total_pixels" not in video_content
+
+    def test_sft_dataset_with_pixel_limits(self, sample_annotations):
+        """Test VideoTemporalSFTDataset includes pixel limits in messages."""
+        min_pixels = 4096
+        max_pixels = 262144
+        total_pixels = 20971520
+
+        dataset = VideoTemporalSFTDataset(
+            annotation_file=sample_annotations,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
+        )
+
+        item = dataset[0]
+        messages = item["messages"]
+
+        video_content = messages[0]["content"][0]
+        assert video_content["type"] == "video"
+        assert video_content["min_pixels"] == min_pixels
+        assert video_content["max_pixels"] == max_pixels
+        assert video_content["total_pixels"] == total_pixels
+
+    def test_rl_dataset_with_pixel_limits(self, sample_annotations):
+        """Test VideoTemporalRLDataset includes pixel limits in messages."""
+        min_pixels = 4096
+        max_pixels = 262144
+        total_pixels = 20971520
+
+        dataset = VideoTemporalRLDataset(
+            annotation_file=sample_annotations,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            total_pixels=total_pixels,
+        )
+
+        item = dataset[0]
+        messages = item["messages"]
+
+        video_content = messages[0]["content"][0]
+        assert video_content["type"] == "video"
+        assert video_content["min_pixels"] == min_pixels
+        assert video_content["max_pixels"] == max_pixels
+        assert video_content["total_pixels"] == total_pixels
+
+    def test_partial_pixel_limits(self, sample_annotations):
+        """Test that partial pixel limits work correctly."""
+        # Only set max_pixels
+        dataset = VideoTemporalDataset(
+            annotation_file=sample_annotations,
+            max_pixels=262144,
+        )
+
+        messages = dataset.get_video_messages(
+            video_path="./videos/test.mp4",
+            query="Test query",
+        )
+
+        video_content = messages[0]["content"][0]
+        assert "min_pixels" not in video_content
+        assert video_content["max_pixels"] == 262144
+        assert "total_pixels" not in video_content
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
