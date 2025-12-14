@@ -926,5 +926,178 @@ class TestCreateDurationBasedBatchSampler:
             )
 
 
+class TestDistributedBatching:
+    """Tests for distributed training support in DurationBasedBatchSampler."""
+    
+    def test_distributed_batch_partitioning(self):
+        """Test that batches are correctly partitioned across multiple GPUs."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+        
+        durations = [10.0] * 20  # 20 videos, each 10s
+        target_duration = 40.0   # Each batch should have ~4 videos
+        
+        # Simulate 2 GPUs
+        sampler_rank0 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,
+            num_replicas=2,
+            rank=0,
+        )
+        
+        sampler_rank1 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,
+            num_replicas=2,
+            rank=1,
+        )
+        
+        batches_rank0 = list(sampler_rank0)
+        batches_rank1 = list(sampler_rank1)
+        
+        # Collect all indices from both GPUs
+        indices_rank0 = [idx for batch in batches_rank0 for idx in batch]
+        indices_rank1 = [idx for batch in batches_rank1 for idx in batch]
+        
+        # Each GPU should have different indices (no overlap)
+        assert set(indices_rank0).isdisjoint(set(indices_rank1))
+        
+        # Together they should cover all samples
+        all_indices = sorted(indices_rank0 + indices_rank1)
+        assert all_indices == list(range(len(durations)))
+    
+    def test_distributed_length_calculation(self):
+        """Test that __len__ returns correct count per GPU."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+        
+        durations = [10.0] * 20
+        target_duration = 40.0
+        
+        # Single GPU
+        sampler_single = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,
+        )
+        
+        # Multi GPU
+        sampler_rank0 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,
+            num_replicas=2,
+            rank=0,
+        )
+        
+        sampler_rank1 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,
+            num_replicas=2,
+            rank=1,
+        )
+        
+        # Length should be approximately half for each GPU
+        len_single = len(sampler_single)
+        len_rank0 = len(sampler_rank0)
+        len_rank1 = len(sampler_rank1)
+        
+        # Each GPU should process roughly half the batches
+        assert len_rank0 <= len_single
+        assert len_rank1 <= len_single
+        assert len_rank0 + len_rank1 >= len_single  # May have +1 due to rounding
+    
+    def test_distributed_with_shuffle(self):
+        """Test distributed training with shuffling enabled."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+        
+        durations = [10.0, 20.0, 15.0, 25.0, 30.0, 12.0, 18.0, 22.0]
+        target_duration = 40.0
+        
+        sampler_rank0 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=True,
+            seed=42,
+            num_replicas=2,
+            rank=0,
+        )
+        
+        sampler_rank1 = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=True,
+            seed=42,
+            num_replicas=2,
+            rank=1,
+        )
+        
+        batches_rank0 = list(sampler_rank0)
+        batches_rank1 = list(sampler_rank1)
+        
+        # Collect all indices
+        indices_rank0 = [idx for batch in batches_rank0 for idx in batch]
+        indices_rank1 = [idx for batch in batches_rank1 for idx in batch]
+        
+        # Verify no overlap and complete coverage
+        assert set(indices_rank0).isdisjoint(set(indices_rank1))
+        all_indices = sorted(indices_rank0 + indices_rank1)
+        assert all_indices == list(range(len(durations)))
+    
+    def test_distributed_set_epoch(self):
+        """Test that set_epoch produces different shuffling across epochs."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+        
+        durations = [10.0] * 12
+        target_duration = 40.0
+        
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=True,
+            seed=42,
+            num_replicas=2,
+            rank=0,
+        )
+        
+        # Get batches for epoch 0
+        sampler.set_epoch(0)
+        batches_epoch0 = list(sampler)
+        indices_epoch0 = [idx for batch in batches_epoch0 for idx in batch]
+        
+        # Get batches for epoch 1
+        sampler.set_epoch(1)
+        batches_epoch1 = list(sampler)
+        indices_epoch1 = [idx for batch in batches_epoch1 for idx in batch]
+        
+        # Different epochs should produce different ordering
+        assert indices_epoch0 != indices_epoch1
+    
+    def test_invalid_rank_raises_error(self):
+        """Test that invalid rank raises ValueError."""
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+        
+        durations = [10.0] * 5
+        
+        # Rank >= num_replicas should raise error
+        with pytest.raises(ValueError, match="Invalid rank"):
+            DurationBasedBatchSampler(
+                durations=durations,
+                target_batch_duration=40.0,
+                num_replicas=2,
+                rank=2,
+            )
+        
+        # Negative rank should raise error
+        with pytest.raises(ValueError, match="Invalid rank"):
+            DurationBasedBatchSampler(
+                durations=durations,
+                target_batch_duration=40.0,
+                num_replicas=2,
+                rank=-1,
+            )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

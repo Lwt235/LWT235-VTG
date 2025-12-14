@@ -377,6 +377,15 @@ class VideoTemporalRLTrainer:
         if self.duration_batching_config and self.duration_batching_config.get("enabled", False):
             from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
             
+            # For distributed training, detect world size and rank
+            # RL trainer uses torch.distributed APIs directly since it doesn't use
+            # HuggingFace Trainer (unlike SFT trainer which uses TrainingArguments)
+            num_replicas = None
+            rank = None
+            if torch.distributed.is_available() and torch.distributed.is_initialized():
+                num_replicas = torch.distributed.get_world_size()
+                rank = torch.distributed.get_rank()
+            
             # Create duration-based batch sampler
             batch_sampler = create_duration_based_batch_sampler(
                 dataset=self.train_dataset,
@@ -386,12 +395,17 @@ class VideoTemporalRLTrainer:
                 shuffle=True,
                 drop_last=self.duration_batching_config.get("drop_last", False),
                 seed=training_config.get("seed"),
+                num_replicas=num_replicas,
+                rank=rank,
             )
             
             # Set epoch for reproducible shuffling
             batch_sampler.set_epoch(epoch)
             
-            logger.info("Using duration-based batch sampling for training")
+            if rank in [None, 0]:
+                logger.info("Using duration-based batch sampling for training")
+                if num_replicas and num_replicas > 1:
+                    logger.info(f"Distributed training: {num_replicas} GPUs, rank {rank}")
             
             return DataLoader(
                 self.train_dataset,

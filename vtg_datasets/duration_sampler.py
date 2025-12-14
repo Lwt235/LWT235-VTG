@@ -15,6 +15,24 @@ from utils.logging_utils import get_logger
 logger = get_logger(__name__)
 
 
+def _get_world_size() -> int:
+    """Get the number of GPUs/processes in distributed training."""
+    if not torch.distributed.is_available():
+        return 1
+    if not torch.distributed.is_initialized():
+        return 1
+    return torch.distributed.get_world_size()
+
+
+def _get_rank() -> int:
+    """Get the rank of current GPU/process in distributed training."""
+    if not torch.distributed.is_available():
+        return 0
+    if not torch.distributed.is_initialized():
+        return 0
+    return torch.distributed.get_rank()
+
+
 class DurationBasedBatchSampler(Sampler[List[int]]):
     """
     Batch sampler that groups videos by total duration.
@@ -44,6 +62,8 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
         shuffle: bool = True,
         drop_last: bool = False,
         seed: Optional[int] = None,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
     ):
         """
         Initialize the duration-based batch sampler.
@@ -56,6 +76,10 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
             shuffle: Whether to shuffle the dataset each epoch.
             drop_last: Whether to drop the last incomplete batch.
             seed: Random seed for shuffling (for reproducibility).
+            num_replicas: Number of processes participating in distributed training.
+                If None, will use torch.distributed.get_world_size().
+            rank: Rank of the current process in distributed training.
+                If None, will use torch.distributed.get_rank().
         """
         super().__init__(None)
         
@@ -76,24 +100,41 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
         self.drop_last = drop_last
         self.seed = seed
         
+        # Distributed training support
+        if num_replicas is None:
+            num_replicas = _get_world_size()
+        if rank is None:
+            rank = _get_rank()
+        
+        if rank >= num_replicas or rank < 0:
+            raise ValueError(f"Invalid rank {rank}, should be in [0, {num_replicas})")
+        
+        self.num_replicas = num_replicas
+        self.rank = rank
+        
         # Track epoch for reproducible shuffling
         self._epoch = 0
         
-        # Log statistics
-        avg_duration = sum(durations) / len(durations)
-        min_duration = min(durations)
-        max_duration = max(durations)
-        expected_batch_size = target_batch_duration / avg_duration
-        
-        logger.info(
-            f"DurationBasedBatchSampler initialized: "
-            f"samples={len(durations)}, target_duration={target_batch_duration:.1f}s, "
-            f"avg_sample_duration={avg_duration:.1f}s, "
-            f"expected_batch_size={expected_batch_size:.1f}"
-        )
-        logger.info(
-            f"Duration range: min={min_duration:.1f}s, max={max_duration:.1f}s"
-        )
+        # Log statistics (only on rank 0 to avoid duplicate logs)
+        if self.rank == 0:
+            avg_duration = sum(durations) / len(durations)
+            min_duration = min(durations)
+            max_duration = max(durations)
+            expected_batch_size = target_batch_duration / avg_duration
+            
+            logger.info(
+                f"DurationBasedBatchSampler initialized: "
+                f"samples={len(durations)}, target_duration={target_batch_duration:.1f}s, "
+                f"avg_sample_duration={avg_duration:.1f}s, "
+                f"expected_batch_size={expected_batch_size:.1f}"
+            )
+            logger.info(
+                f"Duration range: min={min_duration:.1f}s, max={max_duration:.1f}s"
+            )
+            if self.num_replicas > 1:
+                logger.info(
+                    f"Distributed training enabled: num_replicas={self.num_replicas}"
+                )
     
     def set_epoch(self, epoch: int) -> None:
         """
@@ -112,11 +153,13 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
         1. Sort all videos by duration (descending) to group similar-length videos
         2. Apply greedy bin-packing on sorted videos to create balanced batches
         3. Shuffle the order of batches (not videos within batches) for randomness
+        4. In distributed training, partition batches across GPUs
         
         This approach ensures that:
         - Each batch has similar total duration (controlled by target_batch_duration)
         - Each batch has a similar NUMBER of videos (because similar-length videos are grouped)
         - GPU memory usage is more consistent across batches
+        - Each GPU gets a disjoint subset of batches in distributed training
         
         Yields:
             Lists of sample indices for each batch.
@@ -169,25 +212,48 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
             perm = torch.randperm(len(batches), generator=g).tolist()
             batches = [batches[i] for i in perm]
         
+        # In distributed training, partition batches across GPUs using round-robin distribution
+        # Each GPU gets every num_replicas-th batch starting from its rank
+        # Example with 2 GPUs and 10 batches:
+        #   GPU 0 (rank=0): batches [0, 2, 4, 6, 8]
+        #   GPU 1 (rank=1): batches [1, 3, 5, 7, 9]
+        # This ensures load balancing and no data overlap between GPUs
+        if self.num_replicas > 1:
+            batches = [batches[i] for i in range(self.rank, len(batches), self.num_replicas)]
+        
         # Yield batches
         for batch in batches:
             yield batch
     
     def __len__(self) -> int:
         """
-        Return the estimated number of batches.
+        Return the estimated number of batches for this GPU/process.
         
-        Note: This is an approximation since batch sizes vary.
+        For accurate progress bar calculation, this method estimates the total
+        batches based on durations and constraints, then divides by num_replicas
+        for distributed training.
+        
+        Note: This is an estimation since actual batch sizes vary based on video durations.
         """
+        # For accurate batch count, we need to compute actual batches
+        # This is important for correct progress bar display
+        # Since batch sizes vary based on duration, estimation can be inaccurate
+        
+        # Simple estimation based on total duration (fast but may be inaccurate)
         total_duration = sum(self.durations)
         estimated_batches = max(1, int(total_duration / self.target_batch_duration))
         
-        # Account for constraints
+        # Account for max_batch_size constraint
         if self.max_batch_size is not None:
             min_batches = (len(self.durations) + self.max_batch_size - 1) // self.max_batch_size
             estimated_batches = max(estimated_batches, min_batches)
         
-        return estimated_batches
+        # In distributed training, each GPU processes a subset of batches
+        if self.num_replicas > 1:
+            # Each GPU gets approximately 1/num_replicas of the batches
+            estimated_batches = (estimated_batches + self.num_replicas - 1) // self.num_replicas
+        
+        return max(1, estimated_batches)
 
 
 def create_duration_based_batch_sampler(
@@ -198,6 +264,8 @@ def create_duration_based_batch_sampler(
     shuffle: bool = True,
     drop_last: bool = False,
     seed: Optional[int] = None,
+    num_replicas: Optional[int] = None,
+    rank: Optional[int] = None,
 ) -> DurationBasedBatchSampler:
     """
     Create a duration-based batch sampler from a dataset.
@@ -212,6 +280,8 @@ def create_duration_based_batch_sampler(
         shuffle: Whether to shuffle the dataset each epoch.
         drop_last: Whether to drop the last incomplete batch.
         seed: Random seed for reproducibility.
+        num_replicas: Number of processes in distributed training. If None, auto-detected.
+        rank: Rank of current process in distributed training. If None, auto-detected.
     
     Returns:
         Configured DurationBasedBatchSampler instance.
@@ -248,4 +318,6 @@ def create_duration_based_batch_sampler(
         shuffle=shuffle,
         drop_last=drop_last,
         seed=seed,
+        num_replicas=num_replicas,
+        rank=rank,
     )
