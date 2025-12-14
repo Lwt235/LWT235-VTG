@@ -119,8 +119,9 @@ class VideoTemporalSFTTrainer(Trainer):
             current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state and self.state.epoch is not None else 0
 
             # For distributed training, pass distributed parameters to the sampler
-            # These will be auto-detected if not provided, but we pass them explicitly
-            # to ensure consistency with TrainingArguments
+            # SFT trainer uses TrainingArguments which provides world_size and process_index
+            # These will be auto-detected by the sampler if not provided, but we pass
+            # them explicitly to ensure consistency with HuggingFace Trainer's settings
             num_replicas = self.args.world_size if self.args.world_size > 1 else None
             rank = self.args.process_index if self.args.world_size > 1 else None
 

@@ -227,12 +227,13 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
     
     def __len__(self) -> int:
         """
-        Return the number of batches for this GPU/process.
+        Return the estimated number of batches for this GPU/process.
         
-        For accurate progress bar calculation, we compute the actual batches
-        and count how many batches this GPU will process in distributed training.
+        For accurate progress bar calculation, this method estimates the total
+        batches based on durations and constraints, then divides by num_replicas
+        for distributed training.
         
-        Note: This is cached per epoch to avoid recomputation.
+        Note: This is an estimation since actual batch sizes vary based on video durations.
         """
         # For accurate batch count, we need to compute actual batches
         # This is important for correct progress bar display

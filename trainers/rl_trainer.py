@@ -378,7 +378,8 @@ class VideoTemporalRLTrainer:
             from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
             
             # For distributed training, detect world size and rank
-            # Note: RL trainer may need explicit distributed setup
+            # RL trainer uses torch.distributed APIs directly since it doesn't use
+            # HuggingFace Trainer (unlike SFT trainer which uses TrainingArguments)
             num_replicas = None
             rank = None
             if torch.distributed.is_available() and torch.distributed.is_initialized():

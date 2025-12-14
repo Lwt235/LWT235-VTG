@@ -33,7 +33,6 @@ class BatchLoggingCallback(TrainerCallback):
         """
         self.log_batch_stats = log_batch_stats
         self.batch_sizes: List[int] = []
-        self.batch_durations: List[float] = []
     
     def on_step_begin(
         self,
@@ -114,7 +113,6 @@ class BatchLoggingCallback(TrainerCallback):
             
             # Reset statistics
             self.batch_sizes.clear()
-            self.batch_durations.clear()
         
         return control
     
@@ -138,11 +136,18 @@ class BatchLoggingCallback(TrainerCallback):
             Updated trainer control.
         """
         if state.is_world_process_zero:
+            # Calculate effective batch size once for readability
+            effective_batch_size = (
+                args.per_device_train_batch_size * 
+                args.gradient_accumulation_steps * 
+                args.world_size
+            )
+            
             logger.info("=" * 80)
             logger.info("Training Configuration:")
             logger.info(f"  Per-device batch size: {args.per_device_train_batch_size}")
             logger.info(f"  Gradient accumulation steps: {args.gradient_accumulation_steps}")
-            logger.info(f"  Effective batch size: {args.per_device_train_batch_size * args.gradient_accumulation_steps * args.world_size}")
+            logger.info(f"  Effective batch size: {effective_batch_size}")
             logger.info(f"  World size (GPUs): {args.world_size}")
             logger.info(f"  Total optimization steps: {state.max_steps}")
             
