@@ -3,6 +3,7 @@ Tests for dataset modules.
 """
 
 import json
+import statistics
 import tempfile
 from pathlib import Path
 
@@ -746,7 +747,10 @@ class TestDurationBasedBatchSampler:
         batches with similar number of samples (not just similar total duration).
         """
         from vtg_datasets.duration_sampler import DurationBasedBatchSampler
-        import statistics
+
+        # Maximum acceptable coefficient of variation for batch sizes
+        # A lower CV indicates more consistent batch sizes
+        MAX_CV_THRESHOLD = 1.5
 
         # Create a mix of short and long videos
         # This simulates a real dataset with varying video lengths
@@ -784,7 +788,7 @@ class TestDurationBasedBatchSampler:
             # (not too high, indicating consistent batch sizes)
             # Before fix: CV could be very high due to random grouping
             # After fix: CV should be lower due to sorted grouping
-            assert cv < 1.5, f"Batch size variance too high: CV={cv:.2f}, sizes={batch_sizes}"
+            assert cv < MAX_CV_THRESHOLD, f"Batch size variance too high: CV={cv:.2f}, sizes={batch_sizes}"
 
     def test_sorts_by_duration_for_consistent_memory(self):
         """Test that videos are sorted by duration before batching.
@@ -793,6 +797,10 @@ class TestDurationBasedBatchSampler:
         leading to more consistent GPU memory usage.
         """
         from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        # Maximum acceptable ratio between longest and shortest video in a batch
+        # A lower ratio indicates more consistent video lengths within each batch
+        MAX_DURATION_RATIO = 5.0
 
         # Create durations in random order
         durations = [100.0, 10.0, 50.0, 200.0, 20.0, 150.0, 30.0, 180.0]
@@ -817,7 +825,7 @@ class TestDurationBasedBatchSampler:
                 min_dur = min(batch_durations)
                 # The ratio between max and min should not be too extreme
                 # (videos of vastly different lengths shouldn't be in same batch)
-                assert max_dur / min_dur < 5.0, (
+                assert max_dur / min_dur < MAX_DURATION_RATIO, (
                     f"Batch contains videos with vastly different durations: "
                     f"max={max_dur}, min={min_dur}, ratio={max_dur/min_dur:.1f}"
                 )
