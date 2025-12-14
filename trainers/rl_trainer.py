@@ -4,7 +4,6 @@ Reinforcement Learning Trainer for Video Temporal Localization.
 Provides GRPO/R1 training with reward functions for temporal grounding.
 """
 
-import json
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -31,7 +30,7 @@ from trl import GRPOConfig, GRPOTrainer
 from omegaconf import DictConfig, OmegaConf
 
 from utils.logging_utils import get_logger
-from utils.common import load_config, merge_configs, count_parameters
+from utils.common import load_config, merge_configs, count_parameters, get_adapter_info
 from utils.temporal_tokens import (
     add_temporal_tokens_to_tokenizer,
     resize_model_embeddings_for_temporal_tokens,
@@ -40,23 +39,6 @@ from utils.temporal_tokens import (
 from rewards import CompositeReward, create_composite_reward
 
 logger = get_logger(__name__)
-
-
-def _get_adapter_info(model_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
-    """
-    Check if a model path contains a LoRA adapter and return adapter info.
-
-    Args:
-        model_path: Path to model checkpoint.
-
-    Returns:
-        Adapter config dictionary if it's a LoRA adapter, None otherwise.
-    """
-    adapter_config_path = Path(model_path) / "adapter_config.json"
-    if adapter_config_path.exists():
-        with open(adapter_config_path, "r") as f:
-            return json.load(f)
-    return None
 
 
 class VideoTemporalRLTrainer:
@@ -573,7 +555,7 @@ def create_rl_trainer(
     use_temporal_tokens = temporal_config.get("use_temporal_tokens", False)
 
     # Check if this is a LoRA adapter checkpoint
-    adapter_config = _get_adapter_info(model_name)
+    adapter_config = get_adapter_info(model_name)
     is_lora_adapter = adapter_config is not None
 
     torch_dtype = getattr(torch, model_config.get("torch_dtype", "bfloat16"))

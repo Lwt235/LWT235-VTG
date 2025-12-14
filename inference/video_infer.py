@@ -4,7 +4,6 @@ Video Inference for Temporal Localization.
 Provides inference capabilities with visualization for temporal grounding.
 """
 
-import json
 import os
 import re
 from pathlib import Path
@@ -21,7 +20,7 @@ from transformers import (
 from peft import PeftModel
 
 from utils.logging_utils import get_logger
-from utils.common import load_config, seconds_to_timestamp
+from utils.common import load_config, seconds_to_timestamp, get_adapter_info
 from utils.temporal_tokens import (
     parse_temporal_response,
     add_temporal_tokens_to_tokenizer,
@@ -31,23 +30,6 @@ from utils.temporal_tokens import (
 from qwen_vl_utils import process_vision_info
 
 logger = get_logger(__name__)
-
-
-def _get_adapter_info(model_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
-    """
-    Check if a model path contains a LoRA adapter and return adapter info.
-
-    Args:
-        model_path: Path to model checkpoint.
-
-    Returns:
-        Adapter config dictionary if it's a LoRA adapter, None otherwise.
-    """
-    adapter_config_path = Path(model_path) / "adapter_config.json"
-    if adapter_config_path.exists():
-        with open(adapter_config_path, "r") as f:
-            return json.load(f)
-    return None
 
 
 class VideoTemporalInference:
@@ -126,7 +108,7 @@ class VideoTemporalInference:
         logger.info(f"Loading model from {model_path_str}")
 
         # Check if this is a LoRA adapter checkpoint
-        adapter_config = _get_adapter_info(self.model_path)
+        adapter_config = get_adapter_info(self.model_path)
         is_lora_adapter = adapter_config is not None
 
         if is_lora_adapter:
