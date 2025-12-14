@@ -597,6 +597,9 @@ def create_rl_trainer(
             use_relative_timestamps=temporal_cfg.get("use_relative_timestamps", True),
             num_bins=temporal_cfg.get("num_bins", 100),
             use_temporal_tokens=use_temporal_tokens,
+            min_pixels=video_config.get("min_pixels"),
+            max_pixels=video_config.get("max_pixels"),
+            total_pixels=video_config.get("total_pixels"),
         )
 
     # Create data collator
