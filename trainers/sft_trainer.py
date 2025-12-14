@@ -61,6 +61,7 @@ class VideoTemporalSFTTrainer(Trainer):
         mm_projector_lr: Optional[float] = None,
         vision_tower_lr: Optional[float] = None,
         head_lr: Optional[float] = None,
+        duration_batching_config: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         """
@@ -79,6 +80,7 @@ class VideoTemporalSFTTrainer(Trainer):
             mm_projector_lr: Learning rate for multimodal projector.
             vision_tower_lr: Learning rate for vision tower.
             head_lr: Learning rate for task head.
+            duration_batching_config: Configuration for duration-based batch sampling.
             **kwargs: Additional arguments for base Trainer.
         """
         super().__init__(
@@ -97,6 +99,49 @@ class VideoTemporalSFTTrainer(Trainer):
         self.mm_projector_lr = mm_projector_lr
         self.vision_tower_lr = vision_tower_lr
         self.head_lr = head_lr
+        self.duration_batching_config = duration_batching_config
+
+    def get_train_dataloader(self) -> DataLoader:
+        """
+        Create the training dataloader with optional duration-based batch sampling.
+        
+        When duration_batching_config is provided and enabled, uses 
+        DurationBasedBatchSampler to group videos by total duration instead
+        of a fixed batch size.
+        
+        Returns:
+            DataLoader: Training data loader.
+        """
+        if self.duration_batching_config and self.duration_batching_config.get("enabled", False):
+            from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+            
+            # Create duration-based batch sampler
+            batch_sampler = create_duration_based_batch_sampler(
+                dataset=self.train_dataset,
+                target_batch_duration=self.duration_batching_config.get("target_batch_duration", 60.0),
+                max_batch_size=self.duration_batching_config.get("max_batch_size"),
+                min_batch_size=self.duration_batching_config.get("min_batch_size", 1),
+                shuffle=True,  # Always shuffle training data
+                drop_last=self.duration_batching_config.get("drop_last", False),
+                seed=self.args.data_seed,
+            )
+            
+            # Set epoch for reproducible shuffling
+            if hasattr(batch_sampler, "set_epoch"):
+                batch_sampler.set_epoch(int(self.state.epoch) if hasattr(self, "state") and self.state else 0)
+            
+            logger.info("Using duration-based batch sampling for training")
+            
+            return DataLoader(
+                self.train_dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=self.data_collator,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+        
+        # Fall back to default behavior
+        return super().get_train_dataloader()
 
     def create_optimizer(self):
         """
@@ -489,6 +534,17 @@ def create_sft_trainer(
         max_length=training_config.get("max_length", 2048),
     )
 
+    # Get duration batching configuration from data config
+    duration_batching_config = None
+    if data_config is not None:
+        db_config = data_config.get("duration_batching", {})
+        if db_config.get("enabled", False):
+            # Convert OmegaConf to native Python dict if needed
+            if isinstance(db_config, DictConfig):
+                duration_batching_config = OmegaConf.to_container(db_config, resolve=True)
+            else:
+                duration_batching_config = dict(db_config)
+
     # Create trainer
     trainer = VideoTemporalSFTTrainer(
         model=model,
@@ -502,6 +558,7 @@ def create_sft_trainer(
         mm_projector_lr=training_config.get("mm_projector_lr"),
         vision_tower_lr=training_config.get("vision_tower_lr"),
         head_lr=training_config.get("head_lr"),
+        duration_batching_config=duration_batching_config,
     )
 
     # Log training info

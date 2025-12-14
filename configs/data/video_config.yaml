@@ -98,6 +98,24 @@ temporal:
 #   shuffle: true
 #   drop_last: true
 
+# Duration-based batch sampling configuration
+# When enabled, videos are grouped into batches based on total duration
+# instead of a fixed batch size. This helps stabilize GPU memory usage
+# when videos have varying lengths (since frame count = duration * fps).
+duration_batching:
+  # Enable duration-based batch sampling
+  enabled: false
+  # Target total duration (in seconds) for each batch
+  # Example: If target_batch_duration=60 and avg video is 30s, expect ~2 videos/batch
+  target_batch_duration: 60.0
+  # Maximum number of samples per batch (optional constraint)
+  # Set to null to disable this constraint
+  max_batch_size: null
+  # Minimum number of samples per batch
+  min_batch_size: 1
+  # Whether to drop the last incomplete batch
+  drop_last: false
+
 # # Data augmentation (optional, for training)
 # augmentation:
 #   enabled: false

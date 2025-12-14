@@ -59,6 +59,7 @@ class VideoTemporalRLTrainer:
         eval_dataset: Optional[Dataset] = None,
         config: Optional[DictConfig] = None,
         data_collator: Optional[Callable] = None,
+        duration_batching_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the RL trainer.
@@ -73,6 +74,7 @@ class VideoTemporalRLTrainer:
             eval_dataset: Evaluation dataset.
             config: Training configuration.
             data_collator: Data collator for batching.
+            duration_batching_config: Configuration for duration-based batch sampling.
         """
         self.model = model
         self.ref_model = ref_model
@@ -83,6 +85,7 @@ class VideoTemporalRLTrainer:
         self.eval_dataset = eval_dataset
         self.config = config or OmegaConf.create({})
         self.data_collator = data_collator
+        self.duration_batching_config = duration_batching_config
 
         # Training state
         self.global_step = 0
@@ -359,6 +362,53 @@ class VideoTemporalRLTrainer:
 
         return metrics
 
+    def _create_dataloader(self, epoch: int = 0) -> DataLoader:
+        """
+        Create the training dataloader with optional duration-based batch sampling.
+        
+        Args:
+            epoch: Current epoch number for reproducible shuffling.
+        
+        Returns:
+            DataLoader: Training data loader.
+        """
+        training_config = self.config.get("training", {})
+        
+        if self.duration_batching_config and self.duration_batching_config.get("enabled", False):
+            from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
+            
+            # Create duration-based batch sampler
+            batch_sampler = create_duration_based_batch_sampler(
+                dataset=self.train_dataset,
+                target_batch_duration=self.duration_batching_config.get("target_batch_duration", 60.0),
+                max_batch_size=self.duration_batching_config.get("max_batch_size"),
+                min_batch_size=self.duration_batching_config.get("min_batch_size", 1),
+                shuffle=True,
+                drop_last=self.duration_batching_config.get("drop_last", False),
+                seed=training_config.get("seed"),
+            )
+            
+            # Set epoch for reproducible shuffling
+            batch_sampler.set_epoch(epoch)
+            
+            logger.info("Using duration-based batch sampling for training")
+            
+            return DataLoader(
+                self.train_dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=self.data_collator,
+                num_workers=training_config.get("dataloader_num_workers", 4),
+            )
+        
+        # Fall back to default behavior
+        return DataLoader(
+            self.train_dataset,
+            batch_size=training_config.get("per_device_train_batch_size", 1),
+            shuffle=True,
+            collate_fn=self.data_collator,
+            num_workers=training_config.get("dataloader_num_workers", 4),
+        )
+
     def train(
         self,
         num_epochs: Optional[int] = None,
@@ -377,18 +427,13 @@ class VideoTemporalRLTrainer:
 
         logger.info(f"Starting RL training for {num_epochs} epochs")
 
-        dataloader = DataLoader(
-            self.train_dataset,
-            batch_size=training_config.get("per_device_train_batch_size", 1),
-            shuffle=True,
-            collate_fn=self.data_collator,
-            num_workers=training_config.get("dataloader_num_workers", 4),
-        )
-
         for epoch in range(num_epochs):
             self.epoch = epoch
             epoch_metrics = {"reward_mean": 0, "reward_std": 0}
             num_batches = 0
+
+            # Create dataloader for this epoch (supports duration-based batch sampling)
+            dataloader = self._create_dataloader(epoch=epoch)
 
             for batch in dataloader:
                 if max_steps > 0 and self.global_step >= max_steps:
@@ -610,6 +655,17 @@ def create_rl_trainer(
         tokenizer=tokenizer,
     )
 
+    # Get duration batching configuration from data config
+    duration_batching_config = None
+    if data_config is not None:
+        db_config = data_config.get("duration_batching", {})
+        if db_config.get("enabled", False):
+            # Convert OmegaConf to native Python dict if needed
+            if isinstance(db_config, DictConfig):
+                duration_batching_config = OmegaConf.to_container(db_config, resolve=True)
+            else:
+                duration_batching_config = dict(db_config)
+
     # Create trainer
     trainer = VideoTemporalRLTrainer(
         model=model,
@@ -621,6 +677,7 @@ def create_rl_trainer(
         eval_dataset=eval_dataset,
         config=config,
         data_collator=data_collator,
+        duration_batching_config=duration_batching_config,
     )
 
     # Log training info
