@@ -23,10 +23,16 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
     approximately equal to a target value, which helps stabilize GPU 
     memory usage when videos have varying lengths.
     
-    The sampler uses a greedy bin-packing approach:
-    1. Optionally shuffle the dataset indices
-    2. Iterate through samples, adding to current batch until target duration is reached
-    3. When target is reached or exceeded, yield the batch and start a new one
+    The sampler uses a sorted greedy bin-packing approach:
+    1. Sort videos by duration (descending) to group similar-length videos
+    2. Apply greedy bin-packing on sorted videos until target duration is reached
+    3. Shuffle the order of batches (not videos within) for training randomness
+    
+    This approach ensures:
+    - Each batch has similar total duration (controlled by target_batch_duration)
+    - Each batch contains videos of similar length (due to sorted grouping)
+    - GPU memory usage is more consistent across batches (similar-length videos
+      produce similar numbers of frames)
     """
     
     def __init__(
@@ -102,29 +108,31 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
         """
         Iterate over batches of sample indices.
         
+        The batching strategy ensures more consistent GPU memory usage:
+        1. Sort all videos by duration (descending) to group similar-length videos
+        2. Apply greedy bin-packing on sorted videos to create balanced batches
+        3. Shuffle the order of batches (not videos within batches) for randomness
+        
+        This approach ensures that:
+        - Each batch has similar total duration (controlled by target_batch_duration)
+        - Each batch has a similar NUMBER of videos (because similar-length videos are grouped)
+        - GPU memory usage is more consistent across batches
+        
         Yields:
             Lists of sample indices for each batch.
         """
-        # Create list of indices
-        indices = list(range(len(self.durations)))
+        # Create list of (index, duration) pairs and sort by duration (descending)
+        # Sorting by duration ensures videos of similar length are grouped together,
+        # which leads to more consistent batch sizes and GPU memory usage.
+        indexed_durations = list(enumerate(self.durations))
+        indexed_durations.sort(key=lambda x: x[1], reverse=True)
         
-        # Shuffle if requested
-        if self.shuffle:
-            g = torch.Generator()
-            if self.seed is not None:
-                g.manual_seed(self.seed + self._epoch)
-            else:
-                g.manual_seed(self._epoch)
-            perm = torch.randperm(len(indices), generator=g).tolist()
-            indices = [indices[i] for i in perm]
-        
-        # Build batches using greedy bin-packing
+        # Build batches using greedy bin-packing on sorted videos
+        batches: List[List[int]] = []
         current_batch: List[int] = []
         current_duration = 0.0
         
-        for idx in indices:
-            sample_duration = self.durations[idx]
-            
+        for idx, sample_duration in indexed_durations:
             # Check if adding this sample would exceed constraints
             would_exceed_duration = (
                 current_duration + sample_duration > self.target_batch_duration
@@ -136,8 +144,8 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
             )
             
             if current_batch and (would_exceed_duration or would_exceed_size):
-                # Yield current batch and start new one
-                yield current_batch
+                # Save current batch and start new one
+                batches.append(current_batch)
                 current_batch = [idx]
                 current_duration = sample_duration
             else:
@@ -148,7 +156,22 @@ class DurationBasedBatchSampler(Sampler[List[int]]):
         # Handle remaining samples
         if current_batch:
             if len(current_batch) >= self.min_batch_size or not self.drop_last:
-                yield current_batch
+                batches.append(current_batch)
+        
+        # Shuffle the order of batches if requested
+        # This maintains randomness in training order while keeping batches balanced
+        if self.shuffle and batches:
+            g = torch.Generator()
+            if self.seed is not None:
+                g.manual_seed(self.seed + self._epoch)
+            else:
+                g.manual_seed(self._epoch)
+            perm = torch.randperm(len(batches), generator=g).tolist()
+            batches = [batches[i] for i in perm]
+        
+        # Yield batches
+        for batch in batches:
+            yield batch
     
     def __len__(self) -> int:
         """

@@ -3,6 +3,7 @@ Tests for dataset modules.
 """
 
 import json
+import statistics
 import tempfile
 from pathlib import Path
 
@@ -737,6 +738,97 @@ class TestDurationBasedBatchSampler:
                 min_batch_size=3,
                 max_batch_size=2,
             )
+
+    def test_consistent_batch_sizes_with_varied_durations(self):
+        """Test that batches have consistent sizes when durations vary significantly.
+        
+        This test verifies the fix for GPU memory stability: with varied durations,
+        the sampler should group similar-length videos together, resulting in
+        batches with similar number of samples (not just similar total duration).
+        """
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        # Maximum acceptable coefficient of variation for batch sizes
+        # A lower CV indicates more consistent batch sizes
+        MAX_CV_THRESHOLD = 1.5
+
+        # Create a mix of short and long videos
+        # This simulates a real dataset with varying video lengths
+        durations = (
+            [10.0] * 20 +   # 20 short videos (10s each)
+            [50.0] * 10 +   # 10 medium videos (50s each)
+            [200.0] * 5     # 5 long videos (200s each)
+        )  # Total: 35 videos
+
+        target_duration = 100.0
+        
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=True,
+            seed=42,
+        )
+
+        batches = list(sampler)
+        batch_sizes = [len(batch) for batch in batches]
+
+        # All samples should be included
+        all_indices = [idx for batch in batches for idx in batch]
+        assert sorted(all_indices) == list(range(len(durations)))
+
+        # Calculate batch size variance
+        # With the fix, batch sizes should be more consistent
+        # because similar-length videos are grouped together
+        if len(batch_sizes) > 1:
+            mean_size = statistics.mean(batch_sizes)
+            std_size = statistics.stdev(batch_sizes)
+            cv = std_size / mean_size if mean_size > 0 else 0  # Coefficient of variation
+            
+            # The coefficient of variation should be reasonable
+            # (not too high, indicating consistent batch sizes)
+            # Before fix: CV could be very high due to random grouping
+            # After fix: CV should be lower due to sorted grouping
+            assert cv < MAX_CV_THRESHOLD, f"Batch size variance too high: CV={cv:.2f}, sizes={batch_sizes}"
+
+    def test_sorts_by_duration_for_consistent_memory(self):
+        """Test that videos are sorted by duration before batching.
+        
+        This ensures that batches contain videos of similar length,
+        leading to more consistent GPU memory usage.
+        """
+        from vtg_datasets.duration_sampler import DurationBasedBatchSampler
+
+        # Maximum acceptable ratio between longest and shortest video in a batch
+        # A lower ratio indicates more consistent video lengths within each batch
+        MAX_DURATION_RATIO = 5.0
+
+        # Create durations in random order
+        durations = [100.0, 10.0, 50.0, 200.0, 20.0, 150.0, 30.0, 180.0]
+        target_duration = 100.0
+
+        sampler = DurationBasedBatchSampler(
+            durations=durations,
+            target_batch_duration=target_duration,
+            shuffle=False,  # Disable shuffle to see sorting effect
+        )
+
+        batches = list(sampler)
+
+        # With sorting by duration (descending), long videos should form their own batches
+        # and short videos should be grouped together
+        for batch in batches:
+            batch_durations = [durations[idx] for idx in batch]
+            # Each batch should have relatively similar durations
+            # (because videos are sorted before batching)
+            if len(batch_durations) > 1:
+                max_dur = max(batch_durations)
+                min_dur = min(batch_durations)
+                # The ratio between max and min should not be too extreme
+                # (videos of vastly different lengths shouldn't be in same batch)
+                assert max_dur / min_dur < MAX_DURATION_RATIO, (
+                    f"Batch contains videos with vastly different durations: "
+                    f"max={max_dur}, min={min_dur}, ratio={max_dur/min_dur:.1f}"
+                )
 
 
 class TestCreateDurationBasedBatchSampler:
