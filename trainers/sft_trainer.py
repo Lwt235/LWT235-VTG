@@ -104,20 +104,20 @@ class VideoTemporalSFTTrainer(Trainer):
     def get_train_dataloader(self) -> DataLoader:
         """
         Create the training dataloader with optional duration-based batch sampling.
-        
-        When duration_batching_config is provided and enabled, uses 
+
+        When duration_batching_config is provided and enabled, uses
         DurationBasedBatchSampler to group videos by total duration instead
         of a fixed batch size.
-        
+
         Returns:
             DataLoader: Training data loader.
         """
         if self.duration_batching_config and self.duration_batching_config.get("enabled", False):
             from vtg_datasets.duration_sampler import create_duration_based_batch_sampler
-            
+
             # Get current epoch for reproducible shuffling
-            current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state else 0
-            
+            current_epoch = int(self.state.epoch) if hasattr(self, "state") and self.state and self.state.epoch is not None else 0
+
             # Create duration-based batch sampler
             batch_sampler = create_duration_based_batch_sampler(
                 dataset=self.train_dataset,
@@ -129,9 +129,9 @@ class VideoTemporalSFTTrainer(Trainer):
                 seed=self.args.data_seed,
             )
             batch_sampler.set_epoch(current_epoch)
-            
+
             logger.info("Using duration-based batch sampling for training")
-            
+
             return DataLoader(
                 self.train_dataset,
                 batch_sampler=batch_sampler,
@@ -139,7 +139,7 @@ class VideoTemporalSFTTrainer(Trainer):
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
             )
-        
+
         # Fall back to default behavior
         return super().get_train_dataloader()
 

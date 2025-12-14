@@ -68,6 +68,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 export NCCL_P2P_DISABLE=1
+export TORCH_CUDA_ARCH_LIST="8.6"
 
 # Set visible GPUs if specified
 if [[ -n "${GPUS}" ]]; then
