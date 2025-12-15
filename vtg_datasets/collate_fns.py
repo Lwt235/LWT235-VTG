@@ -29,6 +29,7 @@ class SFTCollator:
     padding: Union[bool, str] = True
     truncation: bool = True
     return_tensors: str = "pt"
+    temporal_loss_only: bool = False
     
     def __call__(self, batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
         """
@@ -160,11 +161,12 @@ class SFTCollator:
         if "attention_mask" in model_inputs:
             labels[model_inputs["attention_mask"] == 0] = -100
         
-        # Mask prompt tokens (only train on response)
-        # Find the assistant response start by looking for role patterns
-        # For production use, a more robust approach would use tokenizer.apply_chat_template
-        # with return_assistant_tokens_mask=True if supported by the tokenizer.
-        # Here we use a simple heuristic that masks tokens until "assistant:" is found.
+        # Apply temporal loss masking if enabled
+        # This masks all tokens except the temporal response tokens
+        # (i.e., <|box_start|>, temporal tokens like <250>, and <|box_end|>)
+        if self.temporal_loss_only:
+            labels = self._mask_non_temporal_tokens(labels)
+        
         model_inputs["labels"] = labels
         
         # Add metadata
@@ -179,6 +181,67 @@ class SFTCollator:
         )
         
         return model_inputs
+    
+    def _mask_non_temporal_tokens(self, labels: torch.Tensor) -> torch.Tensor:
+        """
+        Mask all tokens except temporal response tokens.
+        
+        Only keeps labels for tokens between <|box_start|> and <|box_end|> (inclusive).
+        All other tokens are set to -100 (ignored in loss calculation).
+        
+        Args:
+            labels: Tensor of shape (batch_size, seq_len) with token IDs.
+            
+        Returns:
+            Modified labels tensor with non-temporal tokens masked to -100.
+        """
+        # Get token IDs for box markers
+        box_start_token = "<|box_start|>"
+        box_end_token = "<|box_end|>"
+        
+        box_start_id = self.tokenizer.convert_tokens_to_ids(box_start_token)
+        box_end_id = self.tokenizer.convert_tokens_to_ids(box_end_token)
+        
+        # Check if tokens exist in vocabulary
+        if box_start_id == self.tokenizer.unk_token_id or box_end_id == self.tokenizer.unk_token_id:
+            logger.warning(
+                f"Box tokens not found in tokenizer vocabulary. "
+                f"box_start_id={box_start_id}, box_end_id={box_end_id}, unk_id={self.tokenizer.unk_token_id}. "
+                f"Falling back to full sequence loss."
+            )
+            return labels
+        
+        batch_size, seq_len = labels.shape
+        masked_labels = torch.full_like(labels, -100)
+        
+        for i in range(batch_size):
+            seq = labels[i]
+            
+            # Find positions of box_start and box_end tokens
+            box_start_positions = (seq == box_start_id).nonzero(as_tuple=True)[0]
+            box_end_positions = (seq == box_end_id).nonzero(as_tuple=True)[0]
+            
+            if len(box_start_positions) == 0 or len(box_end_positions) == 0:
+                # No temporal response found, keep full sequence loss for this sample
+                masked_labels[i] = seq
+                continue
+            
+            # Use the first occurrence of box_start and the first box_end after it
+            box_start_pos = box_start_positions[0].item()
+            
+            # Find the first box_end after box_start
+            valid_end_positions = box_end_positions[box_end_positions > box_start_pos]
+            if len(valid_end_positions) == 0:
+                # No matching box_end found, keep full sequence loss
+                masked_labels[i] = seq
+                continue
+            
+            box_end_pos = valid_end_positions[0].item()
+            
+            # Keep labels only for tokens from box_start to box_end (inclusive)
+            masked_labels[i, box_start_pos:box_end_pos + 1] = seq[box_start_pos:box_end_pos + 1]
+        
+        return masked_labels
 
 
 @dataclass

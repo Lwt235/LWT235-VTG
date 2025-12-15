@@ -80,6 +80,11 @@ temporal:
   # - "mean": Use mean of existing embeddings
   # - "random": Random initialization
   embedding_init_strategy: "sinusoidal"
+  # Whether to only calculate loss on temporal response tokens
+  # When enabled, only <|box_start|>, temporal tokens (e.g., <250>), and <|box_end|>
+  # will contribute to the loss calculation. All other tokens (video, prompt, etc.)
+  # will be masked from loss computation.
+  temporal_loss_only: true
 
   # # Output format: "tokens" for text generation, "class" for classification
   # output_format: "tokens"

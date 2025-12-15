@@ -18,6 +18,7 @@ from vtg_datasets.video_dataset import (
 from vtg_datasets.collate_fns import (
     pad_temporal_sequences,
     create_temporal_mask,
+    SFTCollator,
 )
 
 
@@ -278,6 +279,119 @@ class TestCollateFunctions:
         assert mask[0, 3] == False
         assert mask[1, 1] == True
         assert mask[1, 2] == False
+
+
+class TestTemporalLossMasking:
+    """Tests for temporal loss masking in SFTCollator."""
+
+    @pytest.fixture
+    def mock_tokenizer(self):
+        """Create a mock tokenizer with box tokens."""
+        class MockTokenizer:
+            def __init__(self):
+                self.unk_token_id = 0
+                self.pad_token_id = 1
+                self._vocab = {
+                    "<|box_start|>": 100,
+                    "<|box_end|>": 101,
+                    "<250>": 150,
+                    "<500>": 151,
+                    "hello": 10,
+                    "world": 11,
+                    "[UNK]": 0,
+                    "[PAD]": 1,
+                }
+            
+            def convert_tokens_to_ids(self, token):
+                return self._vocab.get(token, self.unk_token_id)
+        
+        return MockTokenizer()
+
+    def test_mask_non_temporal_tokens_basic(self, mock_tokenizer):
+        """Test basic temporal loss masking."""
+        # Create a mock collator
+        collator = SFTCollator(
+            processor=None,
+            tokenizer=mock_tokenizer,
+            temporal_loss_only=True,
+        )
+        
+        # Simulate input_ids: [hello, world, box_start, <250>, <500>, box_end]
+        labels = torch.tensor([
+            [10, 11, 100, 150, 151, 101]
+        ])
+        
+        masked = collator._mask_non_temporal_tokens(labels)
+        
+        # Should mask tokens before box_start and after box_end
+        # Only tokens at positions 2-5 (box_start to box_end) should be kept
+        assert masked[0, 0].item() == -100  # "hello" masked
+        assert masked[0, 1].item() == -100  # "world" masked
+        assert masked[0, 2].item() == 100   # box_start kept
+        assert masked[0, 3].item() == 150   # <250> kept
+        assert masked[0, 4].item() == 151   # <500> kept
+        assert masked[0, 5].item() == 101   # box_end kept
+
+    def test_mask_non_temporal_tokens_batch(self, mock_tokenizer):
+        """Test temporal loss masking with batch of sequences."""
+        collator = SFTCollator(
+            processor=None,
+            tokenizer=mock_tokenizer,
+            temporal_loss_only=True,
+        )
+        
+        # Batch of 2 sequences
+        labels = torch.tensor([
+            [10, 11, 100, 150, 151, 101, 1, 1],  # with padding
+            [10, 100, 150, 101, 1, 1, 1, 1],     # shorter response
+        ])
+        
+        masked = collator._mask_non_temporal_tokens(labels)
+        
+        # First sequence
+        assert masked[0, 0].item() == -100   # masked
+        assert masked[0, 1].item() == -100   # masked
+        assert masked[0, 2].item() == 100    # box_start kept
+        assert masked[0, 3].item() == 150    # <250> kept
+        assert masked[0, 4].item() == 151    # <500> kept
+        assert masked[0, 5].item() == 101    # box_end kept
+        assert masked[0, 6].item() == -100   # masked (padding or after box_end)
+        
+        # Second sequence
+        assert masked[1, 0].item() == -100   # masked
+        assert masked[1, 1].item() == 100    # box_start kept
+        assert masked[1, 2].item() == 150    # <250> kept
+        assert masked[1, 3].item() == 101    # box_end kept
+
+    def test_mask_non_temporal_tokens_no_box_tokens(self, mock_tokenizer):
+        """Test fallback when no box tokens found."""
+        collator = SFTCollator(
+            processor=None,
+            tokenizer=mock_tokenizer,
+            temporal_loss_only=True,
+        )
+        
+        # Sequence without box tokens
+        labels = torch.tensor([
+            [10, 11, 150, 151, 1, 1]
+        ])
+        
+        masked = collator._mask_non_temporal_tokens(labels)
+        
+        # Should keep full sequence when no box tokens found
+        assert torch.equal(masked, labels)
+
+    def test_mask_non_temporal_tokens_disabled(self, mock_tokenizer):
+        """Test that masking is disabled when temporal_loss_only=False."""
+        collator = SFTCollator(
+            processor=None,
+            tokenizer=mock_tokenizer,
+            temporal_loss_only=False,
+        )
+        
+        # This shouldn't call _mask_non_temporal_tokens
+        # The masking logic is in __call__, so we just verify the flag
+        assert collator.temporal_loss_only is False
 
 
 class TestTemporalTokensInDataset:

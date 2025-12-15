@@ -546,10 +546,17 @@ def create_sft_trainer(
     # Create data collator
     from vtg_datasets.collate_fns import create_sft_collator
 
+    # Get temporal loss masking configuration
+    # When enabled, only temporal response tokens contribute to the loss
+    temporal_loss_only = temporal_config.get("temporal_loss_only", False)
+    if temporal_loss_only:
+        logger.info("Temporal loss masking enabled: only <|box_start|>, temporal tokens, and <|box_end|> will contribute to loss")
+
     data_collator = create_sft_collator(
         processor=processor,
         tokenizer=tokenizer,
         max_length=training_config.get("max_length", 2048),
+        temporal_loss_only=temporal_loss_only,
     )
 
     # Get duration batching configuration from data config
