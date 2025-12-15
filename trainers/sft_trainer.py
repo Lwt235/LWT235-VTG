@@ -304,7 +304,10 @@ class VideoTemporalSFTTrainer(Trainer):
         _internal_call: bool = False,
     ):
         """
-        Save the model and processor.
+        Save the model, tokenizer, and processor.
+
+        This method explicitly saves the tokenizer to ensure that any newly added
+        tokens (such as temporal tokens <0>~<999>) are preserved in the checkpoint.
 
         Args:
             output_dir: Output directory.
@@ -315,6 +318,12 @@ class VideoTemporalSFTTrainer(Trainer):
 
         # Save model (handles PEFT automatically)
         super().save_model(output_dir, _internal_call=_internal_call)
+
+        # Explicitly save tokenizer to ensure new tokens (e.g., temporal tokens) are saved
+        # The parent class may save the tokenizer, but we do it explicitly to guarantee
+        # that any dynamically added tokens are preserved
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(output_dir)
 
         # Save processor if available
         if self.processor is not None:

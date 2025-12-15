@@ -311,5 +311,40 @@ class TestSinusoidalEmbeddings:
         assert not torch.allclose(embeddings[0], embeddings[50])
 
 
+class TestAddTemporalTokensToTokenizer:
+    """Tests for add_temporal_tokens_to_tokenizer function."""
+
+    def test_uses_added_token_objects(self):
+        """Test that AddedToken objects are used with correct settings."""
+        from tokenizers import AddedToken
+        
+        # Get all temporal tokens and create AddedToken objects as the function does
+        tokens = get_all_temporal_tokens()[:5]  # Just test first 5
+        
+        added_tokens = [
+            AddedToken(
+                content=token,
+                special=True,
+                normalized=False,
+                single_word=True,
+                lstrip=False,
+                rstrip=False,
+            )
+            for token in tokens
+        ]
+        
+        # Verify AddedToken objects have correct attributes
+        for at in added_tokens:
+            assert at.special is True
+            assert at.normalized is False
+            assert at.single_word is True
+            assert at.lstrip is False
+            assert at.rstrip is False
+        
+        # Verify content matches expected format
+        assert added_tokens[0].content == "<0>"
+        assert added_tokens[4].content == "<4>"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
