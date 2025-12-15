@@ -301,9 +301,13 @@ class TestTemporalLossMasking:
                     "[UNK]": 0,
                     "[PAD]": 1,
                 }
+                self._id_to_token = {v: k for k, v in self._vocab.items()}
             
             def convert_tokens_to_ids(self, token):
                 return self._vocab.get(token, self.unk_token_id)
+            
+            def convert_ids_to_tokens(self, token_id):
+                return self._id_to_token.get(token_id, "[UNK]")
         
         return MockTokenizer()
 

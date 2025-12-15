@@ -162,8 +162,9 @@ class SFTCollator:
             labels[model_inputs["attention_mask"] == 0] = -100
         
         # Apply temporal loss masking if enabled
-        # This masks all tokens except the temporal response tokens
-        # (i.e., <|box_start|>, temporal tokens like <250>, and <|box_end|>)
+        # This masks all tokens except those within the temporal response
+        # (i.e., all tokens from <|box_start|> to <|box_end|> inclusive,
+        # which typically contains the temporal tokens like <250>)
         if self.temporal_loss_only:
             labels = self._mask_non_temporal_tokens(labels)
         
@@ -187,6 +188,8 @@ class SFTCollator:
         Mask all tokens except temporal response tokens.
         
         Only keeps labels for tokens between <|box_start|> and <|box_end|> (inclusive).
+        This includes the box markers themselves and any tokens in between
+        (typically the temporal tokens like <250>, <500>).
         All other tokens are set to -100 (ignored in loss calculation).
         
         Args:
@@ -202,11 +205,20 @@ class SFTCollator:
         box_start_id = self.tokenizer.convert_tokens_to_ids(box_start_token)
         box_end_id = self.tokenizer.convert_tokens_to_ids(box_end_token)
         
-        # Check if tokens exist in vocabulary
-        if box_start_id == self.tokenizer.unk_token_id or box_end_id == self.tokenizer.unk_token_id:
+        # Check if tokens exist in vocabulary by verifying they don't map to UNK
+        # and that they can be converted back to the original token string
+        unk_id = getattr(self.tokenizer, 'unk_token_id', None)
+        box_start_valid = (
+            unk_id is None or box_start_id != unk_id
+        ) and self.tokenizer.convert_ids_to_tokens(box_start_id) == box_start_token
+        box_end_valid = (
+            unk_id is None or box_end_id != unk_id
+        ) and self.tokenizer.convert_ids_to_tokens(box_end_id) == box_end_token
+        
+        if not box_start_valid or not box_end_valid:
             logger.warning(
                 f"Box tokens not found in tokenizer vocabulary. "
-                f"box_start_id={box_start_id}, box_end_id={box_end_id}, unk_id={self.tokenizer.unk_token_id}. "
+                f"box_start_id={box_start_id}, box_end_id={box_end_id}. "
                 f"Falling back to full sequence loss."
             )
             return labels
@@ -239,7 +251,8 @@ class SFTCollator:
             box_end_pos = valid_end_positions[0].item()
             
             # Keep labels only for tokens from box_start to box_end (inclusive)
-            masked_labels[i, box_start_pos:box_end_pos + 1] = seq[box_start_pos:box_end_pos + 1]
+            temporal_range = slice(box_start_pos, box_end_pos + 1)
+            masked_labels[i, temporal_range] = seq[temporal_range]
         
         return masked_labels
 
