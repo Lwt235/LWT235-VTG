@@ -183,8 +183,13 @@ class SFTCollator:
                 prompt_length = len(prompt_ids)
                 
                 # Mask all tokens in the prompt (before assistant response)
-                # Note: We mask up to prompt_length to keep only the response tokens
-                if prompt_length > 0 and prompt_length < labels.size(1):
+                # Handle edge case: if prompt_length >= seq_len, entire sequence is prompt
+                if prompt_length >= labels.size(1):
+                    logger.warning(
+                        f"Sample {i}: Prompt length ({prompt_length}) >= sequence length "
+                        f"({labels.size(1)}). Skipping masking to preserve at least some tokens."
+                    )
+                elif prompt_length > 0:
                     labels[i, :prompt_length] = -100
                     
             except Exception as e:

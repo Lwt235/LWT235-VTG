@@ -178,6 +178,9 @@ class TemplateSelector:
         # Random selection
         if sample_idx is not None and self.seed is not None:
             # Deterministic selection based on sample index
+            # Note: We create a new Random instance per sample_idx to ensure
+            # each sample gets a consistent template across training runs
+            # This is intentional for reproducibility, not inefficient
             rng = random.Random(self.seed + sample_idx)
             return rng.choice(self.templates)
         
