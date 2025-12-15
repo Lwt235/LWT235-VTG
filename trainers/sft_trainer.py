@@ -319,9 +319,7 @@ class VideoTemporalSFTTrainer(Trainer):
         # Save model (handles PEFT automatically)
         super().save_model(output_dir, _internal_call=_internal_call)
 
-        # Explicitly save tokenizer to ensure new tokens (e.g., temporal tokens) are saved
-        # The parent class may save the tokenizer, but we do it explicitly to guarantee
-        # that any dynamically added tokens are preserved
+        # Save tokenizer with any dynamically added tokens (e.g., temporal tokens)
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
 
