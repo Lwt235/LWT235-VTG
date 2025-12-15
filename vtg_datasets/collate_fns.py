@@ -160,11 +160,41 @@ class SFTCollator:
         if "attention_mask" in model_inputs:
             labels[model_inputs["attention_mask"] == 0] = -100
         
-        # Mask prompt tokens (only train on response)
-        # Find the assistant response start by looking for role patterns
-        # For production use, a more robust approach would use tokenizer.apply_chat_template
-        # with return_assistant_tokens_mask=True if supported by the tokenizer.
-        # Here we use a simple heuristic that masks tokens until "assistant:" is found.
+        # Mask prompt tokens (only train on assistant response)
+        # Calculate the length of prompt for each sample to mask non-response tokens
+        for i, messages in enumerate(messages_list):
+            # Apply chat template to just the user message to find prompt length
+            user_messages = [msg for msg in messages if msg["role"] == "user"]
+            
+            try:
+                # Get prompt text (without assistant response)
+                prompt_text = self.processor.apply_chat_template(
+                    user_messages,
+                    tokenize=False,
+                    add_generation_prompt=True,  # Adds assistant prefix
+                )
+                
+                # Tokenize prompt to get its length
+                # Use same processor/tokenizer for consistency
+                prompt_ids = self.tokenizer.encode(
+                    prompt_text,
+                    add_special_tokens=False,
+                )
+                prompt_length = len(prompt_ids)
+                
+                # Mask all tokens in the prompt (before assistant response)
+                # Note: We mask up to prompt_length to keep only the response tokens
+                if prompt_length > 0 and prompt_length < labels.size(1):
+                    labels[i, :prompt_length] = -100
+                    
+            except Exception as e:
+                # Fallback: If we can't determine prompt length, don't mask
+                # This ensures training continues even if there's an issue
+                logger.warning(
+                    f"Could not determine prompt length for sample {i}: {e}. "
+                    "Loss will be calculated on all tokens."
+                )
+        
         model_inputs["labels"] = labels
         
         # Add metadata

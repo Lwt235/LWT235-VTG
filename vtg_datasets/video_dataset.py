@@ -20,6 +20,7 @@ from utils.temporal_tokens import (
     timestamp_to_temporal_tokens,
     NUM_TEMPORAL_TOKENS,
 )
+from vtg_datasets.prompt_templates import TemplateSelector
 
 logger = get_logger(__name__)
 
@@ -307,6 +308,8 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
         total_pixels: Optional[int] = None,
+        use_random_templates: bool = True,
+        template_seed: Optional[int] = None,
     ):
         """
         Initialize the SFT dataset.
@@ -321,11 +324,16 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             num_bins: Number of temporal bins for discretization.
             use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             prompt_template: Custom prompt template with {query} placeholder.
+                If provided, this fixed template will be used for all samples.
+                If None, templates will be selected from the template pool.
             response_template: Custom response template with {start} and {end} placeholders.
             transform: Optional transform to apply to samples.
             min_pixels: Minimum pixels per video frame (for GPU memory control).
             max_pixels: Maximum pixels per video frame (for GPU memory control).
             total_pixels: Total pixels across all video frames (for GPU memory control).
+            use_random_templates: Whether to randomly select templates per sample.
+                Only used when prompt_template is None.
+            template_seed: Optional random seed for template selection reproducibility.
         """
         super().__init__(
             annotation_file=annotation_file,
@@ -342,21 +350,28 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
             total_pixels=total_pixels,
         )
 
-        # Set prompt and response templates based on temporal tokens mode
+        # Initialize template selector
+        self.template_selector = TemplateSelector(
+            use_temporal_tokens=use_temporal_tokens,
+            template=prompt_template,
+            random_selection=use_random_templates,
+            seed=template_seed,
+        )
+        
+        # Keep backward compatibility
+        self.prompt_template = prompt_template
+        self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
+        
+        # Response template not used with temporal tokens (generated dynamically)
         if use_temporal_tokens:
-            self.prompt_template = prompt_template or self.TEMPORAL_TOKEN_PROMPT
-            # Response template not used with temporal tokens (generated dynamically)
             self.response_template = None
-        else:
-            self.prompt_template = prompt_template or self.DEFAULT_PROMPT
-            self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
         sample = super().__getitem__(idx)
 
-        # Format prompt
-        prompt = self.prompt_template.format(query=sample["query"])
+        # Format prompt using template selector
+        prompt = self.template_selector.format(query=sample["query"], sample_idx=idx)
 
         # Format response (ground truth)
         if self.use_temporal_tokens:
@@ -451,6 +466,8 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
         total_pixels: Optional[int] = None,
+        use_random_templates: bool = True,
+        template_seed: Optional[int] = None,
     ):
         """
         Initialize the RL dataset.
@@ -465,10 +482,15 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             num_bins: Number of temporal bins for discretization.
             use_temporal_tokens: Whether to use temporal tokens (<0>~<999>) for output.
             prompt_template: Custom prompt template with {query} placeholder.
+                If provided, this fixed template will be used for all samples.
+                If None, templates will be selected from the template pool.
             transform: Optional transform to apply to samples.
             min_pixels: Minimum pixels per video frame (for GPU memory control).
             max_pixels: Maximum pixels per video frame (for GPU memory control).
             total_pixels: Total pixels across all video frames (for GPU memory control).
+            use_random_templates: Whether to randomly select templates per sample.
+                Only used when prompt_template is None.
+            template_seed: Optional random seed for template selection reproducibility.
         """
         super().__init__(
             annotation_file=annotation_file,
@@ -485,18 +507,23 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
             total_pixels=total_pixels,
         )
 
-        # Set prompt template based on temporal tokens mode
-        if use_temporal_tokens:
-            self.prompt_template = prompt_template or self.TEMPORAL_TOKEN_PROMPT
-        else:
-            self.prompt_template = prompt_template or self.DEFAULT_PROMPT
+        # Initialize template selector
+        self.template_selector = TemplateSelector(
+            use_temporal_tokens=use_temporal_tokens,
+            template=prompt_template,
+            random_selection=use_random_templates,
+            seed=template_seed,
+        )
+        
+        # Keep backward compatibility
+        self.prompt_template = prompt_template
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         # Get base sample
         sample = super().__getitem__(idx)
 
-        # Format prompt
-        prompt = self.prompt_template.format(query=sample["query"])
+        # Format prompt using template selector
+        prompt = self.template_selector.format(query=sample["query"], sample_idx=idx)
         sample["prompt"] = prompt
 
         # Store ground truth for reward computation
