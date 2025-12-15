@@ -31,6 +31,10 @@ from qwen_vl_utils import process_vision_info
 
 logger = get_logger(__name__)
 
+# Tokens to clean up from decoded output when preserving special tokens
+# These are Qwen's end-of-generation tokens that should not appear in the response
+CLEANUP_TOKENS = ["<|im_end|>", "<|endoftext|>"]
+
 
 class VideoTemporalInference:
     """
@@ -322,7 +326,18 @@ class VideoTemporalInference:
         # Decode
         prompt_length = inputs["input_ids"].shape[1]
         response_ids = outputs[0, prompt_length:]
-        response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+        
+        # When using temporal tokens, don't skip special tokens to preserve
+        # <|box_start|>, <|box_end|> and temporal tokens like <250>
+        # which are all marked as special tokens
+        if self.use_temporal_tokens:
+            response_text = self.tokenizer.decode(response_ids, skip_special_tokens=False)
+            # Clean up Qwen end-of-generation tokens but keep box markers and temporal tokens
+            for token in CLEANUP_TOKENS:
+                response_text = response_text.replace(token, "")
+            response_text = response_text.strip()
+        else:
+            response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
 
         # Parse timestamps
         try:
