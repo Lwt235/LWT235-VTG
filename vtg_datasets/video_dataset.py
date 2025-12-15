@@ -361,7 +361,7 @@ class VideoTemporalSFTDataset(VideoTemporalDataset):
         # Keep backward compatibility
         # Note: These attributes store the *provided* template, which may be None.
         # Actual templates are selected by self.template_selector.
-        # For debugging, use self.template_selector.get_template(idx) to see what's used.
+        # For debugging: actual_template = self.template_selector.get_template(0)
         self.prompt_template = prompt_template
         self.response_template = response_template or "<|box_start|><{start:.2f}><{end:.2f}><|box_end|>"
         
@@ -521,7 +521,7 @@ class VideoTemporalRLDataset(VideoTemporalDataset):
         # Keep backward compatibility
         # Note: This attribute stores the *provided* template, which may be None.
         # Actual templates are selected by self.template_selector.
-        # For debugging, use self.template_selector.get_template(idx) to see what's used.
+        # For debugging: actual_template = self.template_selector.get_template(0)
         self.prompt_template = prompt_template
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:

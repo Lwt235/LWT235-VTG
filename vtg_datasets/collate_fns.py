@@ -175,7 +175,9 @@ class SFTCollator:
                 )
                 
                 # Tokenize prompt to get its length
-                # Use same processor/tokenizer for consistency
+                # Note: We use add_special_tokens=False because the chat template
+                # already includes special tokens, and we want to count actual tokens
+                # in the formatted text, not add duplicates
                 prompt_ids = self.tokenizer.encode(
                     prompt_text,
                     add_special_tokens=False,

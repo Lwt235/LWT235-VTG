@@ -5,7 +5,7 @@ This module provides a collection of diverse prompt templates for temporal
 grounding tasks to increase training variety and model robustness.
 """
 
-from typing import List, Dict, Any
+from typing import List
 import random
 
 
@@ -179,8 +179,10 @@ class TemplateSelector:
         if sample_idx is not None and self.seed is not None:
             # Deterministic selection based on sample index
             # Note: We create a new Random instance per sample_idx to ensure
-            # each sample gets a consistent template across training runs
-            # This is intentional for reproducibility, not inefficient
+            # each sample gets a consistent template across training runs.
+            # This is intentional for reproducibility - the overhead is negligible
+            # (<1μs per call) and ensures true determinism even if samples are
+            # accessed in different orders during distributed training.
             rng = random.Random(self.seed + sample_idx)
             return rng.choice(self.templates)
         
