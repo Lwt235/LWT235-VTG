@@ -304,7 +304,7 @@ class VideoTemporalSFTTrainer(Trainer):
         _internal_call: bool = False,
     ):
         """
-        Save the model and processor.
+        Save the model, tokenizer, and processor.
 
         Args:
             output_dir: Output directory.
@@ -315,6 +315,10 @@ class VideoTemporalSFTTrainer(Trainer):
 
         # Save model (handles PEFT automatically)
         super().save_model(output_dir, _internal_call=_internal_call)
+
+        # Save tokenizer (processing_class) to preserve temporal tokens
+        if self.processing_class is not None:
+            self.processing_class.save_pretrained(output_dir)
 
         # Save processor if available
         if self.processor is not None:
