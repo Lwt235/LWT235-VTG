@@ -87,8 +87,8 @@ class TestVideoTemporalSFTTrainer:
 
     def test_save_model_handles_none_tokenizer(self, mock_trainer, temp_dir):
         """Test that save_model handles None tokenizer gracefully."""
-        # Set tokenizer to None
-        mock_trainer._processing_class = None
+        # Set tokenizer to None using the public property
+        mock_trainer.processing_class = None
         
         with self._patch_parent_save_model():
             # Should not raise an error
