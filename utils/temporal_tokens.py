@@ -18,6 +18,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
+from transformers import AddedToken
 
 
 # Number of temporal tokens
@@ -381,6 +382,11 @@ def add_temporal_tokens_to_tokenizer(tokenizer: Any) -> Dict[str, int]:
     This function adds new tokens <0> to <999> to the tokenizer.
     The model's embedding layer should be resized after calling this.
 
+    Uses AddedToken objects with special=True, normalized=False, and
+    single_word=True to prevent sub-tokenization of temporal tokens.
+    This ensures tokens like <100> are treated as single atomic units
+    and not split into <, 1, 0, 0, > during tokenization.
+
     Args:
         tokenizer: The tokenizer to modify (in-place).
 
@@ -389,17 +395,26 @@ def add_temporal_tokens_to_tokenizer(tokenizer: Any) -> Dict[str, int]:
     """
     global _temporal_token_start_id, _temporal_token_end_id
 
-    temporal_tokens = get_all_temporal_tokens()
+    temporal_token_strs = get_all_temporal_tokens()
 
     # Record original vocab size (where new tokens will start)
     original_vocab_size = len(tokenizer)
+
+    # Create AddedToken objects with proper settings to prevent sub-tokenization
+    # - special=True: Mark as special token
+    # - normalized=False: Prevent normalization (e.g., lowercasing)
+    # - single_word=True: Prevent sub-tokenization
+    temporal_tokens = [
+        AddedToken(token, special=True, normalized=False, single_word=True)
+        for token in temporal_token_strs
+    ]
 
     # Add tokens to vocabulary as special tokens
     num_added = tokenizer.add_tokens(temporal_tokens, special_tokens=True)
 
     # Build mapping
     token_to_id = {}
-    for token in temporal_tokens:
+    for token in temporal_token_strs:
         token_id = tokenizer.convert_tokens_to_ids(token)
         token_to_id[token] = token_id
 
