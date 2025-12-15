@@ -7,7 +7,8 @@ import shutil
 import tempfile
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock, MagicMock, patch
+from contextlib import contextmanager
 
 from trainers.sft_trainer import VideoTemporalSFTTrainer
 
@@ -58,15 +59,17 @@ class TestVideoTemporalSFTTrainer:
             processor=mock_processor,
         )
         
-        # Replace super().save_model with a mock to avoid actual saving
-        trainer._save_model_without_tokenizer = Mock()
-        
         return trainer
+
+    @contextmanager
+    def _patch_parent_save_model(self):
+        """Context manager to patch parent class save_model method."""
+        with patch('transformers.Trainer.save_model'):
+            yield
 
     def test_save_model_saves_tokenizer(self, mock_trainer, temp_dir):
         """Test that save_model saves the tokenizer (processing_class)."""
-        # Mock the parent class save_model method
-        with pytest.mock.patch('transformers.Trainer.save_model'):
+        with self._patch_parent_save_model():
             mock_trainer.save_model(output_dir=temp_dir)
         
         # Verify that tokenizer was saved
@@ -75,8 +78,7 @@ class TestVideoTemporalSFTTrainer:
 
     def test_save_model_saves_processor(self, mock_trainer, temp_dir):
         """Test that save_model saves the processor."""
-        # Mock the parent class save_model method
-        with pytest.mock.patch('transformers.Trainer.save_model'):
+        with self._patch_parent_save_model():
             mock_trainer.save_model(output_dir=temp_dir)
         
         # Verify that processor was saved
@@ -88,8 +90,7 @@ class TestVideoTemporalSFTTrainer:
         # Set tokenizer to None
         mock_trainer._processing_class = None
         
-        # Mock the parent class save_model method
-        with pytest.mock.patch('transformers.Trainer.save_model'):
+        with self._patch_parent_save_model():
             # Should not raise an error
             mock_trainer.save_model(output_dir=temp_dir)
 
@@ -98,8 +99,7 @@ class TestVideoTemporalSFTTrainer:
         # Set processor to None
         mock_trainer.processor = None
         
-        # Mock the parent class save_model method
-        with pytest.mock.patch('transformers.Trainer.save_model'):
+        with self._patch_parent_save_model():
             # Should not raise an error
             mock_trainer.save_model(output_dir=temp_dir)
 
