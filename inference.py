@@ -1,10 +1,15 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 from inference import VideoTemporalInference
 
 # Initialize
 engine = VideoTemporalInference(
     # model_path="./ckpts/Qwen3-VL-4B-Instruct",
     model_path="./outputs/sft/checkpoint-final",
-    use_temporal_tokens=True
+    use_temporal_tokens=True,
+    min_pixels=4 * 32 * 32,
+    max_pixels=8 * 32 * 32,
+    total_pixels=20480 * 32 * 32
 )
 
 # Predict

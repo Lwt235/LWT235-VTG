@@ -15,7 +15,7 @@
 #   --num_gpus       Number of GPUs to use (default: 1)
 #
 # Example:
-#   ./scripts/sft.sh --num_gpus 2 --gpus 0,1 --deepspeed configs/deepspeed/ds_zero2.json
+#   ./scripts/sft.sh --num_gpus 2 --gpus 2,3 --deepspeed configs/deepspeed/ds_zero2.json
 # ============================================================================
 
 set -e
