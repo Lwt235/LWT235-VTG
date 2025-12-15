@@ -311,5 +311,65 @@ class TestSinusoidalEmbeddings:
         assert not torch.allclose(embeddings[0], embeddings[50])
 
 
+class TestAddTemporalTokensToTokenizer:
+    """Tests for add_temporal_tokens_to_tokenizer function."""
+
+    @pytest.fixture
+    def mock_tokenizer(self):
+        """Create a mock tokenizer for testing."""
+        try:
+            from transformers import AutoTokenizer
+            # Use a small, fast tokenizer for testing
+            tokenizer = AutoTokenizer.from_pretrained("gpt2", trust_remote_code=True)
+            return tokenizer
+        except Exception:
+            pytest.skip("Could not load GPT-2 tokenizer for testing")
+
+    def test_temporal_tokens_are_added(self, mock_tokenizer):
+        """Test that temporal tokens are added to tokenizer."""
+        original_vocab_size = len(mock_tokenizer)
+        token_to_id = add_temporal_tokens_to_tokenizer(mock_tokenizer)
+        
+        # Check that tokens were added
+        assert len(mock_tokenizer) == original_vocab_size + 1000
+        assert len(token_to_id) == 1000
+
+    def test_temporal_tokens_not_subtokenized(self, mock_tokenizer):
+        """Test that temporal tokens are not sub-tokenized.
+        
+        This is the key test for the AddedToken fix - temporal tokens
+        like <100> should be tokenized as single tokens, not split into
+        <, 1, 0, 0, > or similar.
+        """
+        add_temporal_tokens_to_tokenizer(mock_tokenizer)
+        
+        # Test that each temporal token is tokenized as a single token
+        for token_str in ["<0>", "<100>", "<500>", "<999>"]:
+            input_ids = mock_tokenizer.encode(token_str, add_special_tokens=False)
+            # Each temporal token should produce exactly one token ID
+            assert len(input_ids) == 1, f"Token {token_str} was sub-tokenized into {input_ids}"
+
+    def test_temporal_tokens_in_text(self, mock_tokenizer):
+        """Test that temporal tokens in text are correctly tokenized."""
+        add_temporal_tokens_to_tokenizer(mock_tokenizer)
+        
+        # Test a sample text with temporal tokens
+        text = "The segment is from <100> to <200>"
+        input_ids = mock_tokenizer.encode(text, add_special_tokens=False)
+        
+        # Decode back and check temporal tokens are preserved
+        decoded = mock_tokenizer.decode(input_ids)
+        assert "<100>" in decoded
+        assert "<200>" in decoded
+
+    def test_temporal_tokens_special_attribute(self, mock_tokenizer):
+        """Test that temporal tokens have correct special token properties."""
+        add_temporal_tokens_to_tokenizer(mock_tokenizer)
+        
+        # Check that temporal tokens are in added_tokens_encoder
+        assert "<0>" in mock_tokenizer.added_tokens_encoder
+        assert "<999>" in mock_tokenizer.added_tokens_encoder
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
