@@ -587,6 +587,11 @@ def create_rl_trainer(
         if use_temporal_tokens:
             logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
             add_temporal_tokens_to_tokenizer(tokenizer)
+            # Also add temporal tokens to processor's tokenizer to ensure consistency
+            # This prevents temporal tokens like <100> from being sub-tokenized
+            if hasattr(processor, 'tokenizer'):
+                logger.info("Adding temporal tokens to processor's tokenizer")
+                add_temporal_tokens_to_tokenizer(processor.tokenizer)
 
         # Load base model
         model = Qwen3VLForConditionalGeneration.from_pretrained(
@@ -628,6 +633,11 @@ def create_rl_trainer(
         if use_temporal_tokens:
             logger.info("Adding temporal tokens (<0>~<999>) to tokenizer")
             add_temporal_tokens_to_tokenizer(tokenizer)
+            # Also add temporal tokens to processor's tokenizer to ensure consistency
+            # This prevents temporal tokens like <100> from being sub-tokenized
+            if hasattr(processor, 'tokenizer'):
+                logger.info("Adding temporal tokens to processor's tokenizer")
+                add_temporal_tokens_to_tokenizer(processor.tokenizer)
 
         # Load model
         model = Qwen3VLForConditionalGeneration.from_pretrained(
