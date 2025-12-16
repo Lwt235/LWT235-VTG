@@ -447,76 +447,76 @@ def add_temporal_tokens_to_tokenizer(tokenizer: Any) -> Dict[str, int]:
 #     return mask
 
 
-# def initialize_temporal_embeddings(
-#     model: Any,
-#     tokenizer: Any,
-#     initialization_strategy: str = "sinusoidal",
-# ) -> None:
-#     """
-#     Initialize embeddings for temporal tokens.
+def initialize_temporal_embeddings(
+    model: Any,
+    tokenizer: Any,
+    initialization_strategy: str = "sinusoidal",
+) -> None:
+    """
+    Initialize embeddings for temporal tokens.
 
-#     Args:
-#         model: The model with embedding layer.
-#         tokenizer: The tokenizer with temporal tokens added.
-#         initialization_strategy: How to initialize embeddings:
-#             - "sinusoidal": Use sinusoidal positional encoding (recommended)
-#             - "mean": Use mean of all embeddings
-#             - "random": Random initialization
-#     """
-#     # Get embedding layer
-#     if hasattr(model, "get_input_embeddings"):
-#         embeddings = model.get_input_embeddings()
-#     elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
-#         embeddings = model.model.embed_tokens
-#     else:
-#         raise ValueError("Could not find embedding layer in model")
+    Args:
+        model: The model with embedding layer.
+        tokenizer: The tokenizer with temporal tokens added.
+        initialization_strategy: How to initialize embeddings:
+            - "sinusoidal": Use sinusoidal positional encoding (recommended)
+            - "mean": Use mean of all embeddings
+            - "random": Random initialization
+    """
+    # Get embedding layer
+    if hasattr(model, "get_input_embeddings"):
+        embeddings = model.get_input_embeddings()
+    elif hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
+        embeddings = model.model.embed_tokens
+    else:
+        raise ValueError("Could not find embedding layer in model")
 
-#     # Get embedding weight
-#     weight = embeddings.weight.data
-#     embedding_dim = weight.size(1)
-#     vocab_size = weight.size(0)
+    # Get embedding weight
+    weight = embeddings.weight.data
+    embedding_dim = weight.size(1)
+    vocab_size = weight.size(0)
 
-#     # Get temporal token IDs
-#     temporal_ids = get_temporal_token_ids(tokenizer)
+    # Get temporal token IDs
+    temporal_ids = get_temporal_token_ids(tokenizer)
 
-#     # Create mask for existing embeddings (excluding temporal tokens)
-#     existing_mask = _get_existing_embeddings_mask(vocab_size, temporal_ids)
-#     existing_embeddings = weight[existing_mask]
+    # Create mask for existing embeddings (excluding temporal tokens)
+    existing_mask = _get_existing_embeddings_mask(vocab_size, temporal_ids)
+    existing_embeddings = weight[existing_mask]
 
-#     with torch.no_grad():
-#         if initialization_strategy == "sinusoidal":
-#             # Use sinusoidal positional encoding for faster convergence
-#             sin_embeddings = create_sinusoidal_embeddings(
-#                 num_tokens=NUM_TEMPORAL_TOKENS,
-#                 embedding_dim=embedding_dim,
-#                 device=weight.device,
-#                 dtype=weight.dtype,
-#             )
+    with torch.no_grad():
+        if initialization_strategy == "sinusoidal":
+            # Use sinusoidal positional encoding for faster convergence
+            sin_embeddings = create_sinusoidal_embeddings(
+                num_tokens=NUM_TEMPORAL_TOKENS,
+                embedding_dim=embedding_dim,
+                device=weight.device,
+                dtype=weight.dtype,
+            )
 
-#             # Scale to match existing embedding magnitude
-#             existing_std = existing_embeddings.std().item()
-#             sin_embeddings = sin_embeddings * existing_std
+            # Scale to match existing embedding magnitude
+            existing_std = existing_embeddings.std().item()
+            sin_embeddings = sin_embeddings * existing_std
 
-#             for i, token_id in enumerate(temporal_ids):
-#                 if token_id < weight.size(0):
-#                     weight[token_id] = sin_embeddings[i]
+            for i, token_id in enumerate(temporal_ids):
+                if token_id < weight.size(0):
+                    weight[token_id] = sin_embeddings[i]
 
-#         elif initialization_strategy == "mean":
-#             # Initialize with mean of all existing embeddings
-#             mean_embedding = existing_embeddings.mean(dim=0)
-#             for token_id in temporal_ids:
-#                 if token_id < weight.size(0):
-#                     weight[token_id] = mean_embedding
+        elif initialization_strategy == "mean":
+            # Initialize with mean of all existing embeddings
+            mean_embedding = existing_embeddings.mean(dim=0)
+            for token_id in temporal_ids:
+                if token_id < weight.size(0):
+                    weight[token_id] = mean_embedding
 
-#         elif initialization_strategy == "random":
-#             # Random initialization with same std as existing embeddings
-#             std = existing_embeddings.std().item()
-#             for token_id in temporal_ids:
-#                 if token_id < weight.size(0):
-#                     weight[token_id] = torch.randn_like(weight[token_id]) * std
+        elif initialization_strategy == "random":
+            # Random initialization with same std as existing embeddings
+            std = existing_embeddings.std().item()
+            for token_id in temporal_ids:
+                if token_id < weight.size(0):
+                    weight[token_id] = torch.randn_like(weight[token_id]) * std
 
-#         else:
-#             raise ValueError(f"Unknown initialization strategy: {initialization_strategy}")
+        else:
+            raise ValueError(f"Unknown initialization strategy: {initialization_strategy}")
 
 
 def resize_model_embeddings_for_temporal_tokens(

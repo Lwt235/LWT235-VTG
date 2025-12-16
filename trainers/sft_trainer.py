@@ -388,11 +388,11 @@ def create_sft_trainer(
         add_temporal_tokens_to_tokenizer(tokenizer)
 
     # Load model
-    torch_dtype = getattr(torch, model_config.get("torch_dtype", "bfloat16"))
+    dtype = getattr(torch, model_config.get("dtype", "bfloat16"))
 
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         model_name,
-        torch_dtype=torch_dtype,
+        dtype=dtype,
         trust_remote_code=model_config.get("trust_remote_code", True),
         attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )
@@ -565,11 +565,11 @@ def create_sft_trainer(
 
     # Setup callbacks
     from trainers.callbacks import BatchLoggingCallback
-    
+
     all_callbacks = []
     if callbacks:
         all_callbacks.extend(callbacks)
-    
+
     # Add batch logging callback if duration batching is enabled
     if duration_batching_config:
         all_callbacks.append(BatchLoggingCallback(log_batch_stats=True))

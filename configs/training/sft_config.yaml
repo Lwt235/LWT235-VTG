@@ -11,7 +11,7 @@ model:
   trust_remote_code: true
 
   # Precision settings
-  torch_dtype: "bfloat16"
+  dtype: "bfloat16"
   attn_implementation: "flash_attention_2"
 
   # # Token replacement for temporal outputs
