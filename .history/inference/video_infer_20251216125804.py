@@ -157,11 +157,11 @@ class VideoTemporalInference:
 
             # Initialize temporal token embeddings if enabled
             # This MUST happen before loading the LoRA adapter
-            if self.use_temporal_tokens:
-                logger.info("Initializing temporal token embeddings with sinusoidal encoding")
-                resize_model_embeddings_for_temporal_tokens(
-                    self.model, self.tokenizer, "sinusoidal"
-                )
+            # if self.use_temporal_tokens:
+            #     logger.info("Initializing temporal token embeddings with sinusoidal encoding")
+            #     resize_model_embeddings_for_temporal_tokens(
+            #         self.model, self.tokenizer, "sinusoidal"
+            #     )
 
             # Now load the LoRA adapter
             logger.info(f"Loading LoRA adapter from {model_path_str}")
